@@ -6,6 +6,8 @@ CREATE TABLE account(
    id serial PRIMARY KEY,
    username VARCHAR (50) UNIQUE NOT NULL,
    password_hash VARCHAR NOT NULL,
+   firstname varchar(50) not null,
+   lastname varchar(100) not null,
    email VARCHAR (355) UNIQUE NOT NULL,
    phone_number varchar(15) unique not null,
    created_on TIMESTAMP NOT NULL,
@@ -45,9 +47,24 @@ create table purchase_history(
 	purchase_date TIMESTAMP NOT null
 );
 
+create table address(
+	id serial primary key,
+	name varchar(100) not null,
+	address1 varchar(100) not null,
+	address2 varchar(100),
+	city varchar(100) not null,
+	state_province varchar(100) not null,
+	postal_code varchar(10) not null,
+	account_id integer references account(id)
+)
 
-INSERT INTO account(username,password_hash,email,phone_number,created_on,last_login) values 
-('Arturas', MD5('password'), 'arturas.test@gmail.com','+37000000000', CURRENT_TIMESTAMP,current_timestamp + (20 * interval '1 minute'));
+
+
+INSERT INTO account(username,password_hash,firstname, lastname,email,phone_number,created_on,last_login) values 
+('Arturas', MD5('password'),'Arturas', 'Dulka' ,'arturas.test@gmail.com','+37000000000', CURRENT_TIMESTAMP,current_timestamp + (20 * interval '1 minute'));
+
+INSERT INTO account(username,password_hash,firstname, lastname,email,phone_number,created_on,last_login) values 
+('TomasD', MD5('password'),'Tomas', 'Dulka' ,'tomas.test@gmail.com','+37000000001', CURRENT_TIMESTAMP,current_timestamp + (20 * interval '1 minute'));
 
 INSERT INTO credit_card(cc,cc_num,holder_name,expire_date,account_id) values 
 (987654321,111,'Arturas Dulka', current_timestamp + (5 * interval '1 year'),1);
@@ -69,6 +86,8 @@ insert into purchase_history(account_id, product_id, purchase_date) values
 insert into purchase_history(account_id, product_id, purchase_date) values
 (1,1, current_timestamp);
 
+insert into address(name, address1, address2, city ,state_province, postal_code, account_id) values 
+('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '00000', 1);
 
 
 select * from account;
@@ -76,9 +95,5 @@ select * from credit_card;
 select * from product;
 select * from review;
 select * from purchase_history;
+select * from address;
 
-
-
-select * from pg_available_extensions;
-
-create extension base36;
