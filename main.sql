@@ -1,4 +1,5 @@
 -- "relational database schema eshop" google this for relational db examples."
+DROP SCHEMA bdar cascade;
 
 CREATE SCHEMA bdar;
 
@@ -20,7 +21,7 @@ CREATE TABLE credit_card(
    cc_num varchar NOT NULL,
    holder_name VARCHAR NOT NULL,
    expire_date TIMESTAMP NOT null,
-   account_id integer references account(id)
+   account_id integer not null references account(id)
 );
 
 create table product(
@@ -56,7 +57,7 @@ create table address(
 	state_province varchar(100) not null,
 	postal_code varchar(10) not null,
 	account_id integer references account(id)
-)
+);
 
 
 
@@ -89,6 +90,8 @@ insert into purchase_history(account_id, product_id, purchase_date) values
 insert into address(name, address1, address2, city ,state_province, postal_code, account_id) values 
 ('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '00000', 1);
 
+--SELECT is_nullable FROM INFORMATION_SCHEMA.columns where table_schema = 'bdar' and table_name = 'credit_card' and column_name = 'account_id';
+
 
 select * from account;
 select * from credit_card;
@@ -97,3 +100,87 @@ select * from review;
 select * from purchase_history;
 select * from address;
 
+--create extension pgcrypto;
+
+--SELECT * FROM pg_available_extensions
+
+
+create or replace function delete_cascade(p_schema varchar, p_table varchar, p_key varchar, p_recursion varchar[] default null, foreign_column varchar default null)
+ returns integer as $$
+declare
+    rx record;
+    rd record;
+    v_sql varchar;
+    v_is_nullable varchar;
+    v_recursion_key varchar;
+    recnum integer;
+    v_primary_key varchar;
+    v_rows integer;
+   	ret_val varchar;
+begin
+    recnum := 0;
+    select ccu.column_name into v_primary_key
+        from
+        information_schema.table_constraints  tc
+        join information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name and ccu.constraint_schema=tc.constraint_schema
+        and tc.constraint_type='PRIMARY KEY'
+        and tc.table_name=p_table
+        and tc.table_schema=p_schema;
+
+    for rx in (
+        select kcu.table_name as foreign_table_name, 
+        kcu.column_name as foreign_column_name, 
+        kcu.table_schema foreign_table_schema,
+        kcu2.column_name as foreign_table_primary_key
+        from information_schema.constraint_column_usage ccu
+        join information_schema.table_constraints tc on tc.constraint_name=ccu.constraint_name and tc.constraint_catalog=ccu.constraint_catalog and ccu.constraint_schema=ccu.constraint_schema 
+        join information_schema.key_column_usage kcu on kcu.constraint_name=ccu.constraint_name and kcu.constraint_catalog=ccu.constraint_catalog and kcu.constraint_schema=ccu.constraint_schema
+        join information_schema.table_constraints tc2 on tc2.table_name=kcu.table_name and tc2.table_schema=kcu.table_schema
+        join information_schema.key_column_usage kcu2 on kcu2.constraint_name=tc2.constraint_name and kcu2.constraint_catalog=tc2.constraint_catalog and kcu2.constraint_schema=tc2.constraint_schema
+        where ccu.table_name=p_table  and ccu.table_schema=p_schema
+        and TC.CONSTRAINT_TYPE='FOREIGN KEY'
+        and tc2.constraint_type='PRIMARY KEY'
+)
+    loop
+        v_sql := 'select '||rx.foreign_table_primary_key||' as key from '||rx.foreign_table_schema||'.'||rx.foreign_table_name||'
+            where '||rx.foreign_column_name||'='||quote_literal(p_key)||' for update';
+        raise notice '%',v_sql;
+        --found a foreign key, now find the primary keys for any data that exists in any of those tables.
+        for rd in execute v_sql
+        loop
+            v_recursion_key=rx.foreign_table_schema||'.'||rx.foreign_table_name||'.'||rx.foreign_column_name||'='||rd.key;
+             raise notice '%',v_recursion_key;
+            if (v_recursion_key = any (p_recursion)) then
+                raise notice 'Avoiding infinite loop';
+            else
+                raise notice 'Recursing to %,%',rx.foreign_table_name, rd.key;
+                recnum:= recnum +delete_cascade(rx.foreign_table_schema::varchar, rx.foreign_table_name::varchar, rd.key::varchar, p_recursion||v_recursion_key,  rx.foreign_column_name::varchar);
+            end if;
+        end loop;
+    end loop;
+    begin
+    --actually delete original record.\
+    v_is_nullable := 'select is_nullable from INFORMATION_SCHEMA.columns where table_schema = '||quote_literal(p_schema)||' and table_name ='||quote_literal(p_table)||' and column_name ='||quote_literal(foreign_column);
+    execute v_is_nullable into ret_val;
+   	raise notice 'Info %.% %',p_schema,p_table,foreign_column;
+   	if(ret_val = 'NO') then
+   		v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
+   	else
+   		v_sql := 'update '||p_schema||'.'||p_table||' set '||foreign_column||'= NULL where '||v_primary_key||'='||quote_literal(p_key);
+   	end if;
+   	raise notice '%',v_sql;
+    execute v_sql;
+   	--raise notice 'Deleting %.% %=%',p_schema,p_table,v_primary_key,p_key;
+    get diagnostics v_rows= row_count;
+    recnum:= recnum +v_rows;
+    exception when others then recnum=0;
+    end;
+
+    return recnum;
+end;
+$$
+language PLPGSQL;
+--select is_nullable from INFORMATION_SCHEMA.columns where table_schema = 'bdar' and table_name =purchase_history and column_name =account_id
+--select is_nullable from information_schema.columns where table_schema = 'bdar' and table_name = 'address' and column_name = 'account_id';
+ update bdar.credit_card set account_id= NULL where id='1'
+select delete_cascade('bdar', 'account', '1');
