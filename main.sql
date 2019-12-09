@@ -118,6 +118,7 @@ declare
     v_rows integer;
    	ret_val varchar;
 begin
+	raise notice 'Info %',foreign_column;
     recnum := 0;
     select ccu.column_name into v_primary_key
         from
@@ -140,7 +141,7 @@ begin
         where ccu.table_name=p_table  and ccu.table_schema=p_schema
         and TC.CONSTRAINT_TYPE='FOREIGN KEY'
         and tc2.constraint_type='PRIMARY KEY'
-)
+	)
     loop
         v_sql := 'select '||rx.foreign_table_primary_key||' as key from '||rx.foreign_table_schema||'.'||rx.foreign_table_name||'
             where '||rx.foreign_column_name||'='||quote_literal(p_key)||' for update';
@@ -161,11 +162,14 @@ begin
     begin
     --actually delete original record.\
     v_is_nullable := 'select is_nullable from INFORMATION_SCHEMA.columns where table_schema = '||quote_literal(p_schema)||' and table_name ='||quote_literal(p_table)||' and column_name ='||quote_literal(foreign_column);
-    execute v_is_nullable into ret_val;
-   	raise notice 'Info %.% %',p_schema,p_table,foreign_column;
-   	if(ret_val = 'NO') then
-   		v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
+   	if(v_is_nullable is not null) then
+   		execute v_is_nullable into ret_val;
    	else
+   		raise notice 'test:: %',v_is_nullable; 
+   	end if;
+   	raise notice 'Info %.% %',p_schema,p_table,foreign_column;
+    v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
+   	if(ret_val = 'YES') then
    		v_sql := 'update '||p_schema||'.'||p_table||' set '||foreign_column||'= NULL where '||v_primary_key||'='||quote_literal(p_key);
    	end if;
    	raise notice '%',v_sql;
@@ -173,6 +177,7 @@ begin
    	--raise notice 'Deleting %.% %=%',p_schema,p_table,v_primary_key,p_key;
     get diagnostics v_rows= row_count;
     recnum:= recnum +v_rows;
+   
     exception when others then recnum=0;
     end;
 
@@ -182,5 +187,4 @@ $$
 language PLPGSQL;
 --select is_nullable from INFORMATION_SCHEMA.columns where table_schema = 'bdar' and table_name =purchase_history and column_name =account_id
 --select is_nullable from information_schema.columns where table_schema = 'bdar' and table_name = 'address' and column_name = 'account_id';
- update bdar.credit_card set account_id= NULL where id='1'
 select delete_cascade('bdar', 'account', '1');
