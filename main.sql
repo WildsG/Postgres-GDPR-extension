@@ -1,4 +1,4 @@
--- "relational database schema eshop" google this for relational db examples."
+-- "relational database schema eshop" google this for relational db examples."teest
 DROP SCHEMA bdar cascade;
 
 CREATE SCHEMA bdar;
