@@ -117,6 +117,7 @@ declare
     v_primary_key varchar;
     v_rows integer;
    	ret_val varchar;
+    v_insert_sql varchar;
 begin
 	raise notice 'Info %',foreign_column;
     recnum := 0;
@@ -171,7 +172,11 @@ begin
     v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
    	if(ret_val = 'YES') then
    		v_sql := 'update '||p_schema||'.'||p_table||' set '||foreign_column||'= NULL where '||v_primary_key||'='||quote_literal(p_key);
-   	end if;
+   		v_insert_sql:= FORMAT('insert into bdar_tables.delayed_delete_rows (schema_name, table_name, record_id, delete_on) VALUES(%s,%s,%s,%s)', quote_literal(p_schema),quote_literal(p_table),p_key, quote_literal(current_timestamp));
+     	raise notice '%',v_insert_sql;
+   		execute v_insert_sql;
+   end if;
+    
    	raise notice '%',v_sql;
     execute v_sql;
    	--raise notice 'Deleting %.% %=%',p_schema,p_table,v_primary_key,p_key;
