@@ -1,5 +1,5 @@
-EXTENSION = base36        # the extensions name
-DATA = base36--0.0.1.sql  # script files to install
+EXTENSION = bdar_helper        # the extensions name
+DATA = bdar_helper--0.0.1.sql  # script files to install
 
 # postgres build stuff
 PG_CONFIG = pg_config

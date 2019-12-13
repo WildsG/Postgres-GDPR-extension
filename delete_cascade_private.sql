@@ -1,4 +1,3 @@
--- "relational database schema eshop" google this for relational db examples."teest
 DROP SCHEMA bdar cascade;
 
 CREATE SCHEMA bdar;
@@ -90,29 +89,8 @@ insert into purchase_history(account_id, product_id, purchase_date) values
 insert into address(name, address1, address2, city ,state_province, postal_code, account_id) values 
 ('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '00000', 1);
 
---SELECT is_nullable FROM INFORMATION_SCHEMA.columns where table_schema = 'bdar' and table_name = 'credit_card' and column_name = 'account_id';
 
-
-select * from account;
-select * from credit_card;
-select * from product;
-select * from review;
-select * from purchase_history;
-select * from address;
-
---create extension pgcrypto;
-
---SELECT * FROM pg_available_extensions
-drop extension bdar_helper;
-create extension pg_cron;
-create extension bdar_helper;
-select bdar_forget('bdar', 'account', '1');
-select bdar_forget_configured('bdar', 'account', '1');
-drop extension pg_cron;
-create extension pg_cron;
-
-
-create or replace function delete_cascade(p_schema varchar, p_table varchar, p_key varchar, p_recursion varchar[] default null, foreign_column varchar default null)
+create or replace function delete_cascade_private(p_schema varchar, p_table varchar, p_key varchar, p_recursion varchar[] default null, foreign_column varchar default null)
  returns integer as $$
 declare
     rx record;
@@ -163,29 +141,26 @@ begin
                 raise notice 'Avoiding infinite loop';
             else
                 raise notice 'Recursing to %,%',rx.foreign_table_name, rd.key;
-                recnum:= recnum +delete_cascade(rx.foreign_table_schema::varchar, rx.foreign_table_name::varchar, rd.key::varchar, p_recursion||v_recursion_key,  rx.foreign_column_name::varchar);
+                recnum:= recnum +delete_cascade_private(rx.foreign_table_schema::varchar, rx.foreign_table_name::varchar, rd.key::varchar, p_recursion||v_recursion_key,  rx.foreign_column_name::varchar);
             end if;
         end loop;
     end loop;
     begin
     --actually delete original record.\
-    v_is_nullable := 'select is_nullable from INFORMATION_SCHEMA.columns where table_schema = '||quote_literal(p_schema)||' and table_name ='||quote_literal(p_table)||' and column_name ='||quote_literal(foreign_column);
-   	if(v_is_nullable is not null) then
-   		execute v_is_nullable into ret_val;
-   	else
-   		raise notice 'test:: %',v_is_nullable; 
-   	end if;
    	raise notice 'Info %.% %',p_schema,p_table,foreign_column;
    
     v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
-   	if(ret_val = 'YES') then
-   		v_sql := 'update '||p_schema||'.'||p_table||' set '||foreign_column||'= NULL where '||v_primary_key||'='||quote_literal(p_key);
-   		v_insert_sql:= FORMAT('insert into bdar_tables.delayed_delete_rows (schema_name, table_name, record_id, delete_on) VALUES(%s,%s,%s,%s)',
-   							  quote_literal(p_schema),quote_literal(p_table),p_key, quote_literal(current_timestamp + (10 * interval '1 minute')));
-     	raise notice '%',v_insert_sql;
+    select table_name from bdar_tables.private_entities 
+    where bdar_tables.private_entities.table_name in(p_table) 
+    and bdar_tables.private_entities.schema_name in(p_schema) into ret_val;
+    raise notice 'name: %',ret_val;
+    v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
+    if(ret_val is not null) then
+   		 v_sql := 'update '||p_schema||'.'||p_table||' set '||foreign_column||'= NULL where '||v_primary_key||'='||quote_literal(p_key);
+   		 v_insert_sql:= FORMAT('insert into bdar_tables.delayed_delete_rows (schema_name, table_name, record_id, delete_on) VALUES(%s,%s,%s,%s)',
+   							  quote_literal(p_schema),quote_literal(p_table),p_key, quote_literal(current_timestamp + (10 * interval '1 minute')));   		
    		execute v_insert_sql;
-   end if;
-    
+    end if;
    	raise notice '%',v_sql;
     execute v_sql;
    	--raise notice 'Deleting %.% %=%',p_schema,p_table,v_primary_key,p_key;
@@ -199,7 +174,5 @@ begin
 end;
 $$
 language PLPGSQL;
---select is_nullable from INFORMATION_SCHEMA.columns where table_schema = 'bdar' and table_name =purchase_history and column_name =account_id
---select is_nullable from information_schema.columns where table_schema = 'bdar' and table_name = 'address' and column_name = 'account_id';
-select delete_cascade('bdar', 'account', '1');
 
+select delete_cascade_private('bdar', 'account', '1');

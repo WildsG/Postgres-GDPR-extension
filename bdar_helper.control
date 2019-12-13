@@ -1,0 +1,4 @@
+# nvlfunc exte# bdar_helper extension
+comment = 'bdar_helper extension'
+default_version = '0.0.1'
+relocatable = true
