@@ -65,10 +65,14 @@ INSERT INTO account(username,password_hash,firstname, lastname,email,phone_numbe
 ('Arturas', MD5('password'),'Arturas', 'Dulka' ,'arturas.test@gmail.com','+37000000000', CURRENT_TIMESTAMP,current_timestamp + (20 * interval '1 minute'));
 
 INSERT INTO account(username,password_hash,firstname, lastname,email,phone_number,created_on,last_login) values 
+('Arturas1', MD5('password'),'Arturas', 'Dulka' ,'arturas1.test@gmail.com','+37000000002', CURRENT_TIMESTAMP,current_timestamp + (20 * interval '1 minute'));
+
+
+INSERT INTO account(username,password_hash,firstname, lastname,email,phone_number,created_on,last_login) values 
 ('TomasD', MD5('password'),'Tomas', 'Dulka' ,'tomas.test@gmail.com','+37000000001', CURRENT_TIMESTAMP,current_timestamp + (20 * interval '1 minute'));
 
 INSERT INTO credit_card(cc,cc_num,holder_name,expire_date,account_id) values 
-(987654321,111,'Arturas Dulka', current_timestamp + (5 * interval '1 year'),1);
+('1000 1234 5678 9010','111','Arturas Dulka', current_timestamp + (5 * interval '1 year'),1);
 
 insert into product(product_name, product_type, description, stock, price) values 
 ('Samsung Galaxy 7', 'smartphone', 'good, reliable, but weak battery', 1, 80);
@@ -95,6 +99,8 @@ insert into address(name, address1, address2, city ,state_province, postal_code,
 
 select * from account;
 select * from credit_card;
+
+
 select * from product;
 select * from review;
 select * from purchase_history;
@@ -109,97 +115,89 @@ create extension bdar_helper;
 select bdar_forget('bdar', 'account', '1');
 select bdar_forget_configured('bdar', 'account', '1');
 drop extension pg_cron;
-create extension pg_cron;
+
+select * from bdar_show_activity_log();
 
 
-create or replace function delete_cascade(p_schema varchar, p_table varchar, p_key varchar, p_recursion varchar[] default null, foreign_column varchar default null)
- returns integer as $$
-declare
-    rx record;
-    rd record;
-    v_sql varchar;
-    v_is_nullable varchar;
-    v_recursion_key varchar;
-    recnum integer;
-    v_primary_key varchar;
-    v_rows integer;
-   	ret_val varchar;
-    v_insert_sql varchar;
-begin
-	raise notice 'Info %',foreign_column;
-    recnum := 0;
-    select ccu.column_name into v_primary_key
-        from
-        information_schema.table_constraints  tc
-        join information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name and ccu.constraint_schema=tc.constraint_schema
-        and tc.constraint_type='PRIMARY KEY'
-        and tc.table_name=p_table
-        and tc.table_schema=p_schema;
+drop function show_activity_log;;
 
-    for rx in (
-        select kcu.table_name as foreign_table_name, 
-        kcu.column_name as foreign_column_name, 
-        kcu.table_schema foreign_table_schema,
-        kcu2.column_name as foreign_table_primary_key
-        from information_schema.constraint_column_usage ccu
-        join information_schema.table_constraints tc on tc.constraint_name=ccu.constraint_name and tc.constraint_catalog=ccu.constraint_catalog and ccu.constraint_schema=ccu.constraint_schema 
-        join information_schema.key_column_usage kcu on kcu.constraint_name=ccu.constraint_name and kcu.constraint_catalog=ccu.constraint_catalog and kcu.constraint_schema=ccu.constraint_schema
-        join information_schema.table_constraints tc2 on tc2.table_name=kcu.table_name and tc2.table_schema=kcu.table_schema
-        join information_schema.key_column_usage kcu2 on kcu2.constraint_name=tc2.constraint_name and kcu2.constraint_catalog=tc2.constraint_catalog and kcu2.constraint_schema=tc2.constraint_schema
-        where ccu.table_name=p_table  and ccu.table_schema=p_schema
-        and TC.CONSTRAINT_TYPE='FOREIGN KEY'
-        and tc2.constraint_type='PRIMARY KEY'
-	)
-    loop
-        v_sql := 'select '||rx.foreign_table_primary_key||' as key from '||rx.foreign_table_schema||'.'||rx.foreign_table_name||'
-            where '||rx.foreign_column_name||'='||quote_literal(p_key)||' for update';
-        raise notice '%',v_sql;
-        --found a foreign key, now find the primary keys for any data that exists in any of those tables.
-        for rd in execute v_sql
-        loop
-            v_recursion_key=rx.foreign_table_schema||'.'||rx.foreign_table_name||'.'||rx.foreign_column_name||'='||rd.key;
-             raise notice '%',v_recursion_key;
-            if (v_recursion_key = any (p_recursion)) then
-                raise notice 'Avoiding infinite loop';
-            else
-                raise notice 'Recursing to %,%',rx.foreign_table_name, rd.key;
-                recnum:= recnum +delete_cascade(rx.foreign_table_schema::varchar, rx.foreign_table_name::varchar, rd.key::varchar, p_recursion||v_recursion_key,  rx.foreign_column_name::varchar);
-            end if;
-        end loop;
-    end loop;
-    begin
-    --actually delete original record.\
-    v_is_nullable := 'select is_nullable from INFORMATION_SCHEMA.columns where table_schema = '||quote_literal(p_schema)||' and table_name ='||quote_literal(p_table)||' and column_name ='||quote_literal(foreign_column);
-   	if(v_is_nullable is not null) then
-   		execute v_is_nullable into ret_val;
-   	else
-   		raise notice 'test:: %',v_is_nullable; 
-   	end if;
-   	raise notice 'Info %.% %',p_schema,p_table,foreign_column;
-   
-    v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
-   	if(ret_val = 'YES') then
-   		v_sql := 'update '||p_schema||'.'||p_table||' set '||foreign_column||'= NULL where '||v_primary_key||'='||quote_literal(p_key);
-   		v_insert_sql:= FORMAT('insert into bdar_tables.delayed_delete_rows (schema_name, table_name, record_id, delete_on) VALUES(%s,%s,%s,%s)',
-   							  quote_literal(p_schema),quote_literal(p_table),p_key, quote_literal(current_timestamp + (10 * interval '1 minute')));
-     	raise notice '%',v_insert_sql;
-   		execute v_insert_sql;
-   end if;
-    
-   	raise notice '%',v_sql;
-    execute v_sql;
-   	--raise notice 'Deleting %.% %=%',p_schema,p_table,v_primary_key,p_key;
-    get diagnostics v_rows= row_count;
-    recnum:= recnum +v_rows;
-   
-    exception when others then recnum=0;
-    end;
+select * from bdar_tables.conf c;
 
-    return recnum;
-end;
-$$
-language PLPGSQL;
---select is_nullable from INFORMATION_SCHEMA.columns where table_schema = 'bdar' and table_name =purchase_history and column_name =account_id
---select is_nullable from information_schema.columns where table_schema = 'bdar' and table_name = 'address' and column_name = 'account_id';
-select delete_cascade('bdar', 'account', '1');
+select update_parameter('delete_wait_time_minutes', '5');
+
+
+select * from bdar.postgres_log pl
+select count(*) from bdar.postgres_log pl
+select from bdar.postgres_log pl;
+
+
+copy tmp_table from program 'cat /var/lib/postgresql/12/main/log/*.csv' with csv ;
+
+select  setting from pg_catalog.pg_settings where name = 'data_directory'
+select * from pg_tablespace;
+select * from bdar.postgres_log pl;
+delete from bdar.postgres_log
+create table account_full as 
+select aa.id, aa.firstname, aa.lastname, aa.email,aa.phone_number, ad."name",ad.address1, ad.address2, ad.city, ad.state_province, ad.postal_code from account aa
+left join address ad on ad.account_id = aa.id;
+
+select * from account_full am
+SELECT anon.load();
+
+
+
+drop view account_master;
+create extension if not exists anon cascade;
+drop extension anon;
+SECURITY LABEL FOR anon ON COLUMN account_full.firstname IS 'MASKED WITH FUNCTION anon.fake_first_name()';
+
+SELECT anon.anonymize_table('account_full');
+
+select * from pg_catalog.pg_available_extensions pae
+
+create extension if not exists pgcrypto
+
+update credit_card set cc_num = (select PGP_SYM_ENCRYPT('1000 1234 5678 9010', 'AES_KEY') as cc_num) where id = 1;
+select * from credit_card cc
+
+select PGP_SYM_DECRYPT('\xc30d040903025edebe1fd068d02565d2390124c1b5ea5fa4b2ccce0a2d55b2c55e3fd3d0429223e4c56474f509eb38b78d833f9602508c46dcecac32221aff470ae019cac0f3e935abea', 'AES_KEY')
+
+
+
+
+
+
+Anonymization lygiai lenteleje - Lygis, value kuria naudos, komanda
+
+Funkcija kuri anonimizuoja gauna ( duomenis selecto pavidalu, masyva kiekvieno stulpelio anonimizavimo komandai tai tarkim [null, zip, null, phone ir .tt], Lygi)
+https://stackoverflow.com/questions/24881926/pass-a-select-result-as-an-argument-to-postgresql-function
+
+Funkcija sukuria viewa, i kuri ikelia visus selectus  pvz :
+ CREATE VIEW anonymized_patient AS
+SELECT 
+    'REDACTED' AS name,
+    anon.generalize_int4range(zipcode,100) AS zipcode,
+    anon.generalize_tsrange(birth,'decade') AS birth
+    disease
+FROM patients;
+
+ir kiekviena stulepi uzmaskuoja.
+
+Tada dar reiks funkciju, savo anonimizavimo lygio kurimui, kur bus paduodamos reiksmes - lygio pavadinimas, ir is eiles parametrai kiekvienai komandai, reiksmes ir kt.
+Dar reiks nepamirsk k anonimity funkcijOS checko is anonym extensiono gal kazkaip prideti i mano extensiona
+
+----------------------------------------------------------------------------------------------------------------------------
+
+reikes lenteles kuri turis nuoroda i stulpeli kuri reikia kriptuot
+kriptavimo raktas gali guleti kazkur kompe kazkokima faile, ir reikes nurodyti funkcijai patha iki to failo su raktu, taip bus nuskaitomas raktas
+reikia, kad extensionas sukurtu kazkoki trigeri kai yra pridedamas jautrus stulpelis, kad darant inserta tai lentelei jis suveiktu, ir uzmaskuotu ta lauka.
+toks pat trigeris atvirkstiniam mechanizmui kai reikia duomenis pasiimti. 
+
+Patikrinti, kas bus jei raktas negeras?
+
+
+
+
+
+
 

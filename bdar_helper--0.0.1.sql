@@ -29,10 +29,80 @@ CREATE TABLE IF NOT EXISTS bdar_tables.cron_log(
 	query varchar not null,
 	executed timestamp not null
 );
+CREATE TABLE IF NOT EXISTS bdar_tables.postgres_log
+(
+  log_time timestamp(3) with time zone,
+  user_name text,
+  database_name text,
+  process_id integer,
+  connection_from text,
+  session_id text,
+  session_line_num bigint,
+  command_tag text,
+  session_start_time timestamp with time zone,
+  virtual_transaction_id text,
+  transaction_id bigint,
+  error_severity text,
+  sql_state_code text,
+  message text,
+  detail text,
+  hint text,
+  internal_query text,
+  internal_query_pos integer,
+  context text,
+  query text,
+  query_pos integer,
+  location text,
+  application_name text,
+  PRIMARY KEY (session_id, session_line_num)
+);
 
 insert into bdar_tables.conf(param, value) values('local', 'true');
 insert into bdar_tables.conf(param, value) values('delete_wait_time_minutes', '1');
 
+create or replace function bdar_show_activity_log() RETURNS TABLE (
+  log_time timestamp(3) with time zone,
+  user_name text,
+  database_name text,
+  process_id integer,
+  connection_from text,
+  session_id text,
+  session_line_num bigint,
+  command_tag text,
+  session_start_time timestamp with time zone,
+  virtual_transaction_id text,
+  transaction_id bigint,
+  error_severity text,
+  sql_state_code text,
+  message text,
+  detail text,
+  hint text,
+  internal_query text,
+  internal_query_pos integer,
+  context text,
+  query text,
+  query_pos integer,
+  location text,
+  application_name text
+)
+AS $$
+declare
+    v_select_q varchar;
+   	dir varchar;
+begin 
+	CREATE TEMP TABLE tmp_table 
+	ON COMMIT drop AS
+	SELECT * FROM bdar_tables.postgres_log WITH NO DATA;
+	select  setting from pg_catalog.pg_settings where name = 'data_directory' into dir;
+	v_select_q := 'copy tmp_table from program '||' ''cat '||dir||'/log/*.csv'' with csv';
+	raise notice '%', v_select_q;
+	execute v_select_q ;
+	INSERT INTO bdar_tables.postgres_log 
+	SELECT * FROM tmp_table t where not exists (select * from bdar_tables.postgres_log p where p.session_id = t.session_id and p.session_line_num = t.session_line_num);
+	RETURN query select * from bdar_tables.postgres_log pl;
+end;
+$$
+LANGUAGE PLPGSQL;
 
 create or replace function add_private_entity(p_schema varchar, p_table varchar) 
 returns integer as $$
@@ -58,6 +128,21 @@ end;
 $$
 LANGUAGE PLPGSQL;
 
+create or replace function update_parameter(parameter_name varchar, parameter_value varchar) 
+returns varchar as $$
+declare
+    v_id varchar;
+begin
+	update bdar_tables.conf set value = parameter_value where param = parameter_name
+	returning parameter_value into v_id;
+	if(v_id is null) then
+		raise exception 'no such parameter with % name', parameter_name;
+	end if;
+return v_id;
+end;
+$$
+LANGUAGE PLPGSQL;
+
 -- This fucntions is for cron use
 CREATE or replace FUNCTION bdar_delete() RETURNS integer AS $$
 declare
@@ -76,7 +161,6 @@ END LOOP;
 RETURN 0;
 END; $$
 LANGUAGE PLPGSQL;
-
 
 
 -- DEPENDENCIES
