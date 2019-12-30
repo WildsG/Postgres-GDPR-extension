@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS bdar_tables.cron_log(
 	query varchar not null,
 	executed timestamp not null
 );
+
 CREATE TABLE IF NOT EXISTS bdar_tables.postgres_log
 (
   log_time timestamp(3) with time zone,
@@ -57,8 +58,54 @@ CREATE TABLE IF NOT EXISTS bdar_tables.postgres_log
   PRIMARY KEY (session_id, session_line_num)
 );
 
+CREATE TABLE IF NOT EXISTS bdar_tables.anon_config(
+	command varchar not null,
+	value varchar[],
+	anon_level varchar not null,
+	primary KEY(anon_level, command)
+);
+
+
 insert into bdar_tables.conf(param, value) values('local', 'true');
 insert into bdar_tables.conf(param, value) values('delete_wait_time_minutes', '1');
+
+insert into bdar_tables.anon_config(command, value, anon_level) values ('email',array['3', '***', '5'], 'LOW');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',array['1','xxxx','3'], 'LOW');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['month'], 'LOW');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('zip', array['50'], 'LOW');
+
+
+insert into bdar_tables.anon_config(command, value, anon_level) values ('email',array['2', '*****', '4'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',array['1','xxxxxx','1'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['year'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('zip', array['100'], 'MED');
+
+insert into bdar_tables.anon_config(command, value, anon_level) values ('email',array['1', '******', '2'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',array['2','xxxxxx','0'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['decade'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('zip', array['1000'], 'HIGH');
+
+
+delete from bdar_tables.anon_config where command = 'email';
+
+select * from bdar.account_full;
+select * from bdar_tables.anon_config;
+
+
+create or replace function bdar_anonimyze(anon_level varchar, query varchar, commands varchar[]) returns text as 
+$$
+declare
+	v_sql varchar;
+begin
+	for rd in execute query
+       loop
+       	  raise notice '%', query;
+          raise notice '%', rd;
+       end loop;
+end;
+$$
+LANGUAGE PLPGSQL;
+
 
 create or replace function bdar_show_activity_log() RETURNS TABLE (
   log_time timestamp(3) with time zone,

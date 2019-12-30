@@ -86,8 +86,12 @@ insert into purchase_history(account_id, product_id, purchase_date) values
 insert into purchase_history(account_id, product_id, purchase_date) values
 (1,1, current_timestamp);
 
-insert into address(name, address1, address2, city ,state_province, postal_code, account_id) values 
-('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '00000', 1);
+insert into bdar.address(name, address1, address2, city ,state_province, postal_code, account_id) values 
+('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '45678', 1);
+insert into bdar.address(name, address1, address2, city ,state_province, postal_code, account_id) values 
+('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '44009', 2);
+insert into bdar.address(name, address1, address2, city ,state_province, postal_code, account_id) values 
+('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '46888', 6);
 
 
 create or replace function delete_cascade_private(p_schema varchar, p_table varchar, p_key varchar, p_recursion varchar[] default null, foreign_column varchar default null)
