@@ -85,23 +85,151 @@ insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',
 insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['decade'], 'HIGH');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('zip', array['1000'], 'HIGH');
 
-
-delete from bdar_tables.anon_config where command = 'email';
-
-select * from bdar.account_full;
-select * from bdar_tables.anon_config;
-
-
-create or replace function bdar_anonimyze(anon_level varchar, query varchar, commands varchar[]) returns text as 
+create or replace function bdar_anonimyze(anon_lvl varchar, view_name varchar, commands varchar[]) returns void as 
 $$
 declare
-	v_sql varchar;
+	v_sql text;
+	counter integer;
+	delete_sql text;
+	rd record;
+	record_count integer;
+	column_command text;
+	stringified text;
+	arr text[];
 begin
-	for rd in execute query
-       loop
-       	  raise notice '%', query;
-          raise notice '%', rd;
-       end loop;
+	counter:= 1;
+	record_count:= (select
+		count(c.column_name)
+	from
+		information_schema.tables t
+	left join information_schema.columns c on
+		t.table_schema = c.table_schema
+		and t.table_name = c.table_name
+	where
+		table_type = 'VIEW'
+		and t.table_schema not in ('information_schema','pg_catalog','anon')
+		and t.table_name = view_name);
+	-- TODO length check
+	------------------------------------------------------------------------
+	v_sql:= 'create or replace VIEW '||view_name||'_anonimyzed AS
+	SELECT ';
+    for rd in (select
+		c.column_name
+	from
+		information_schema.tables t
+	left join information_schema.columns c on
+		t.table_schema = c.table_schema
+		and t.table_name = c.table_name
+	where
+		table_type = 'VIEW'
+		and t.table_schema not in ('information_schema','pg_catalog','anon')
+		and t.table_name = view_name
+	) 
+    loop	
+    	column_command:= regexp_replace(rd::varchar,'\(|\)', '', 'g');
+		IF commands[counter] = 'zip' then
+			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip' and ac.anon_level = anon_lvl), ',', '*') into stringified;
+   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
+		END IF;
+		IF commands[counter] = 'email' then
+			select value from bdar_tables.anon_config ac where command = 'email' and ac.anon_level = anon_lvl into arr;
+   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
+		END IF;
+		IF commands[counter] = 'phone' then
+			select value from bdar_tables.anon_config ac where command = 'phone' and ac.anon_level = anon_lvl into arr;
+   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
+		END IF;
+		IF commands[counter] = 'birth' then
+			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip'  and ac.anon_level = anon_lvl), ',', '*') into stringified;
+   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
+		END IF;
+    	v_sql:= v_sql||column_command||',';
+    	counter:= counter + 1;
+    end loop;
+    v_sql:= LEFT(v_sql,length(v_sql)-1)||' from '||view_name||';';
+   	delete_sql:= 'DROP VIEW IF EXISTS '||view_name||'_anonimyzed;';
+   	execute delete_sql;
+    execute v_sql;
+end;
+$$
+LANGUAGE PLPGSQL;
+
+create or replace function bdar_anonimyze_column(anon_lvl varchar, view_name varchar, column_name varchar, v_command varchar) returns void as 
+$$
+declare
+	v_sql text;
+	delete_sql text;
+	rd record;
+	column_command text;
+	stringified text;
+	arr text[];
+begin
+	------------------------------------------------------------------------
+	--SELECT anon.load();
+	v_sql:= 'create or replace VIEW '||view_name||'_anonimyzed AS
+	SELECT ';
+    for rd in (select
+		c.column_name
+	from
+		information_schema.tables t
+	left join information_schema.columns c on
+		t.table_schema = c.table_schema
+		and t.table_name = c.table_name
+	where
+		table_type = 'VIEW'
+		and t.table_schema not in ('information_schema','pg_catalog','anon')
+		and t.table_name = view_name
+	) 
+    loop	
+    	column_command:= regexp_replace(rd::varchar,'\(|\)', '', 'g');
+    	if column_command = column_name then
+		IF v_command = 'zip' then
+			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip' and ac.anon_level = anon_lvl), ',', '*') into stringified;
+   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
+		END IF;
+		IF v_command = 'email' then
+			select value from bdar_tables.anon_config ac where command = 'email' and ac.anon_level = anon_lvl into arr;
+   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
+		END IF;
+		IF v_command = 'phone' then
+			select value from bdar_tables.anon_config ac where command = 'phone' and ac.anon_level = anon_lvl into arr;
+   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
+		END IF;
+		IF v_command = 'birth' then
+			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip'  and ac.anon_level = anon_lvl), ',', '*') into stringified;
+   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
+		END IF;
+		end if;
+    	v_sql:= v_sql||column_command||',';
+    end loop;
+    v_sql:= LEFT(v_sql,length(v_sql)-1)||' from '||view_name||';';
+   	delete_sql:= 'DROP VIEW IF EXISTS '||view_name||'_anonimyzed;';
+   	execute delete_sql;
+    execute v_sql;
+end;
+$$
+LANGUAGE PLPGSQL;
+
+create or replace function add_anon_rule(v_command varchar,value varchar[],  anon_lvl varchar) 
+returns text as $$
+declare
+    v_id text;
+begin
+	insert into bdar_tables.anon_config(command, value, anon_level) values (v_command,value, anon_lvl)
+	returning v_command into v_id;
+return v_id;
+end;
+$$
+LANGUAGE PLPGSQL;
+
+create or replace function remove_anon_rule(v_command varchar,  anon_lvl varchar) 
+returns text as $$
+declare
+    v_id text;
+begin
+	delete from bdar_tables.anon_config where v_command = command and anon_level = anon_lvl
+	returning v_command into v_id;
+return v_id;
 end;
 $$
 LANGUAGE PLPGSQL;

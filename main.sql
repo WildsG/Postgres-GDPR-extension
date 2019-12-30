@@ -91,16 +91,23 @@ insert into purchase_history(account_id, product_id, purchase_date) values
 insert into purchase_history(account_id, product_id, purchase_date) values
 (1,1, current_timestamp);
 
-insert into address(name, address1, address2, city ,state_province, postal_code, account_id) values 
-('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '00000', 1);
+
+insert into bdar.address(name, address1, address2, city ,state_province, postal_code, account_id) values 
+('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '45678', 1);
+insert into bdar.address(name, address1, address2, city ,state_province, postal_code, account_id) values 
+('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '44009', 3);
+insert into bdar.address(name, address1, address2, city ,state_province, postal_code, account_id) values 
+('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '46888', 4);
+
+create view persons_view as 
+select aa.id, aa.firstname, aa.lastname, aa.email,aa.phone_number, ad."name",ad.address1, ad.address2, ad.city, ad.state_province, ad.postal_code from account aa
+left join address ad on ad.account_id = aa.id;
 
 --SELECT is_nullable FROM INFORMATION_SCHEMA.columns where table_schema = 'bdar' and table_name = 'credit_card' and column_name = 'account_id';
 
 
 select * from account;
 select * from credit_card;
-
-
 select * from product;
 select * from review;
 select * from purchase_history;
@@ -110,6 +117,7 @@ select * from address;
 
 --SELECT * FROM pg_available_extensions
 drop extension bdar_helper;
+drop schema bdar_tables;
 create extension pg_cron;
 create extension bdar_helper;
 select bdar_forget('bdar', 'account', '1');
@@ -119,7 +127,7 @@ drop extension pg_cron;
 select * from bdar_show_activity_log();
 
 
-drop function show_activity_log;;
+
 
 select * from bdar_tables.conf c;
 
@@ -188,143 +196,17 @@ Dar reiks nepamirsk k anonimity funkcijOS checko is anonym extensiono gal kazkai
 
 
 
-create or replace function bdar_anonimyze(anon_lvl varchar, view_name varchar, commands varchar[]) returns text as 
-$$
-declare
-	v_sql text;
-	counter integer;
-	delete_sql text;
-	rd record;
-	record_count integer;
-	column_command text;
-	stringified text;
-	arr text[];
-begin
-	counter:= 1;
-	record_count:= (select
-		count(c.column_name)
-	from
-		information_schema.tables t
-	left join information_schema.columns c on
-		t.table_schema = c.table_schema
-		and t.table_name = c.table_name
-	where
-		table_type = 'VIEW'
-		and t.table_schema not in ('information_schema','pg_catalog','anon')
-		and t.table_name = view_name);
-	-- TODO length check
-	------------------------------------------------------------------------
-	v_sql:= 'create or replace VIEW '||view_name||'_anonimyzed AS
-	SELECT ';
-    for rd in (select
-		c.column_name
-	from
-		information_schema.tables t
-	left join information_schema.columns c on
-		t.table_schema = c.table_schema
-		and t.table_name = c.table_name
-	where
-		table_type = 'VIEW'
-		and t.table_schema not in ('information_schema','pg_catalog','anon')
-		and t.table_name = view_name
-	) 
-    loop	
-    	column_command:= regexp_replace(rd::varchar,'\(|\)', '', 'g');
-		IF commands[counter] = 'zip' then
-			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip' and ac.anon_level = anon_lvl), ',', '*') into stringified;
-   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
-		END IF;
-		IF commands[counter] = 'email' then
-			select value from bdar_tables.anon_config ac where command = 'email' and ac.anon_level = anon_lvl into arr;
-   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
-		END IF;
-		IF commands[counter] = 'phone' then
-			select value from bdar_tables.anon_config ac where command = 'phone' and ac.anon_level = anon_lvl into arr;
-   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
-		END IF;
-		IF commands[counter] = 'birth' then
-			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip'  and ac.anon_level = anon_lvl), ',', '*') into stringified;
-   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
-		END IF;
-    	v_sql:= v_sql||column_command||',';
-    	--RAISE NOTICE '%', v_sql;
-    	counter:= counter + 1;
-    end loop;
-    v_sql:= LEFT(v_sql,length(v_sql)-1)||' from '||view_name||';';
-   	delete_sql:= 'DROP VIEW IF EXISTS '||view_name||'_anonimyzed;';
-   	execute delete_sql;
-    RAISE NOTICE '%', delete_sql;
-    RAISE NOTICE '%', v_sql;
-    execute v_sql;
-return 'view created';
-end;
-$$
-LANGUAGE PLPGSQL;
-
-create or replace function bdar_anonimyze(anon_lvl varchar, view_name varchar, column_name varchar, command varchar) returns text as 
-$$
-declare
-	v_sql text;
-	counter integer;
-	delete_sql text;
-	rd record;
-	column_command text;
-	stringified text;
-	arr text[];
-begin
-	counter:= 1;
-	------------------------------------------------------------------------
-	v_sql:= 'create or replace VIEW '||view_name||'_anonimyzed AS
-	SELECT ';
-    for rd in (select
-		c.column_name
-	from
-		information_schema.tables t
-	left join information_schema.columns c on
-		t.table_schema = c.table_schema
-		and t.table_name = c.table_name
-	where
-		table_type = 'VIEW'
-		and t.table_schema not in ('information_schema','pg_catalog','anon')
-		and t.table_name = view_name
-	) 
-    loop	
-    	column_command:= regexp_replace(rd::varchar,'\(|\)', '', 'g');
-		IF commands[counter] = 'zip' then
-			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip' and ac.anon_level = anon_lvl), ',', '*') into stringified;
-   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
-		END IF;
-		IF commands[counter] = 'email' then
-			select value from bdar_tables.anon_config ac where command = 'email' and ac.anon_level = anon_lvl into arr;
-   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
-		END IF;
-		IF commands[counter] = 'phone' then
-			select value from bdar_tables.anon_config ac where command = 'phone' and ac.anon_level = anon_lvl into arr;
-   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
-		END IF;
-		IF commands[counter] = 'birth' then
-			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip'  and ac.anon_level = anon_lvl), ',', '*') into stringified;
-   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
-		END IF;
-    	v_sql:= v_sql||column_command||',';
-    	--RAISE NOTICE '%', v_sql;
-    	counter:= counter + 1;
-    end loop;
-    v_sql:= LEFT(v_sql,length(v_sql)-1)||' from '||view_name||';';
-   	delete_sql:= 'DROP VIEW IF EXISTS '||view_name||'_anonimyzed;';
-   	execute delete_sql;
-    RAISE NOTICE '%', delete_sql;
-    RAISE NOTICE '%', v_sql;
-    execute v_sql;
-return 'view created';
-end;
-$$
-LANGUAGE PLPGSQL;
 
 
-select bdar_anonimyze('HIGH', 'persons_view', array[null,null,null,'email','phone',null,null,null,null,null,'zip'])
-select * from persons_view_anonimyzed pva
+select remove_anon_rule('phone','SUPER')
+select add_anon_rule('phone',array['0','xxxx','0'], 'SUPER')
 
+select * from bdar_tables.anon_config ac;
+
+select  bdar_anonimyze('HIGH', 'persons_view', array[null,null,null,'email','phone',null,null,null,null,null,'zip'])
+select bdar_anonimyze_column('HIGH', 'persons_view', 'phone_number', 'phone');
+
+select * from persons_view_anonimyzed pva2
 
 select * from bdar_tables.anon_config ac
 select * from account_view_anonimyzed ava
