@@ -74,6 +74,9 @@ INSERT INTO account(username,password_hash,firstname, lastname,email,phone_numbe
 INSERT INTO credit_card(cc,cc_num,holder_name,expire_date,account_id) values 
 ('1000 1234 5678 9010','111','Arturas Dulka', current_timestamp + (5 * interval '1 year'),1);
 
+INSERT INTO credit_card(cc,cc_num,holder_name,expire_date,account_id) values 
+('1000 1234 5678 9011','112','Arturas Dulka', current_timestamp + (5 * interval '1 year'),1);
+
 insert into product(product_name, product_type, description, stock, price) values 
 ('Samsung Galaxy 7', 'smartphone', 'good, reliable, but weak battery', 1, 80);
 insert into product(product_name, product_type, description, stock, price) values 
@@ -174,6 +177,7 @@ select PGP_SYM_DECRYPT('\xc30d040903025edebe1fd068d02565d2390124c1b5ea5fa4b2ccce
 
 
 
+
 Anonymization lygiai lenteleje - Lygis, value kuria naudos, komanda
 
 Funkcija kuri anonimizuoja gauna ( duomenis selecto pavidalu, masyva kiekvieno stulpelio anonimizavimo komandai tai tarkim [null, zip, null, phone ir .tt], Lygi)
@@ -253,8 +257,66 @@ toks pat trigeris atvirkstiniam mechanizmui kai reikia duomenis pasiimti.
 Patikrinti, kas bus jei raktas negeras?
 
 
+create table crypted_columns(
+	table_schema varchar,
+	table_name varchar,
+	table_column varchar
+);
+
+create extension hstore;
+
+CREATE or replace FUNCTION encrypt_column() 
+  RETURNS trigger AS
+$$
+declare
+   v_sql text;
+   v_sql1 text;
+  _col text := quote_ident(TG_ARGV[0]);
+begin
+   execute 'select PGP_SYM_ENCRYPT('||'$1'||'.'||TG_ARGV[0]||', ''AES_KEY'')' using new into v_sql;
+   NEW:= NEW #= hstore(_col, v_sql);  
+   RETURN NEW;
+END;
+$$
+language plpgsql;
+
+CREATE or replace FUNCTION decrypt_column() 
+  RETURNS trigger AS
+$$
+declare
+   v_sql text;
+   v_sql1 text;
+  _col text := quote_ident(TG_ARGV[0]);
+begin
+   execute 'select PGP_SYM_ENCRYPT('||'$1'||'.'||TG_ARGV[0]||', ''AES_KEY'')' using new into v_sql;
+   NEW:= NEW #= hstore(_col, v_sql);  
+   RETURN NEW;
+END;
+$$
+language plpgsql;
 
 
 
 
+
+---------------------
+select cc_num, PGP_SYM_DECRYPT(cc_num::bytea, 'AES_KEY') from credit_card cc;
+
+
+
+
+
+
+
+create trigger test_trigger before insert on credit_card for each row execute procedure crypt_column('cc_num');
+
+drop trigger test_trigger on credit_card;
+
+
+select * from credit_card cc
+
+delete from credit_card cc
+
+select * from bdar_show_activity_log();
+select * from bdar_tables.conf c
 
