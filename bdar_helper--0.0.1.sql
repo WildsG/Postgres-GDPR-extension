@@ -69,6 +69,38 @@ CREATE TABLE IF NOT EXISTS bdar_tables.anon_config(
 insert into bdar_tables.conf(param, value) values('local', 'true');
 insert into bdar_tables.conf(param, value) values('delete_wait_time_minutes', '1');
 
+CREATE or replace FUNCTION encrypt_column() 
+  RETURNS trigger AS
+$$
+declare
+   v_sql text;
+   v_sql1 text;
+  _col text := quote_ident(TG_ARGV[0]);
+begin
+   execute 'select PGP_SYM_ENCRYPT('||'$1'||'.'||TG_ARGV[0]||','||quote_literal(TG_ARGV[1])||')' using new into v_sql;
+   NEW:= NEW #= hstore(_col, v_sql);  
+   RETURN NEW;
+END;
+$$
+language plpgsql;
+
+create or replace function set_crypted_column(schema_name varchar, table_name varchar, column_name varchar, crypt_key varchar) returns void as
+$$
+begin
+	execute 'create trigger '||schema_name||'_'||table_name||'_'||column_name||'_crypt'||' before insert on '||schema_name||'.'||table_name||' for each row execute procedure encrypt_column('||quote_literal(column_name)||','||quote_literal(crypt_key)||');';
+end;
+$$
+language plpgsql;
+
+create or replace function remove_crypted_column(schema_name varchar, table_name varchar, column_name varchar) returns void as
+$$
+begin
+	execute 'drop trigger '||schema_name||'_'||table_name||'_'||column_name||'_crypt'||' on '||schema_name||'.'||table_name||';';
+end;
+$$
+language plpgsql;
+
+
 insert into bdar_tables.anon_config(command, value, anon_level) values ('email',array['3', '***', '5'], 'LOW');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',array['1','xxxx','3'], 'LOW');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['month'], 'LOW');

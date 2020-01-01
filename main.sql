@@ -256,59 +256,16 @@ toks pat trigeris atvirkstiniam mechanizmui kai reikia duomenis pasiimti.
 
 Patikrinti, kas bus jei raktas negeras?
 
-
-create table crypted_columns(
-	table_schema varchar,
-	table_name varchar,
-	table_column varchar
-);
-
 create extension hstore;
 
-CREATE or replace FUNCTION encrypt_column() 
-  RETURNS trigger AS
-$$
-declare
-   v_sql text;
-   v_sql1 text;
-  _col text := quote_ident(TG_ARGV[0]);
-begin
-   execute 'select PGP_SYM_ENCRYPT('||'$1'||'.'||TG_ARGV[0]||', ''AES_KEY'')' using new into v_sql;
-   NEW:= NEW #= hstore(_col, v_sql);  
-   RETURN NEW;
-END;
-$$
-language plpgsql;
 
-CREATE or replace FUNCTION decrypt_column() 
-  RETURNS trigger AS
-$$
-declare
-   v_sql text;
-   v_sql1 text;
-  _col text := quote_ident(TG_ARGV[0]);
-begin
-   execute 'select PGP_SYM_ENCRYPT('||'$1'||'.'||TG_ARGV[0]||', ''AES_KEY'')' using new into v_sql;
-   NEW:= NEW #= hstore(_col, v_sql);  
-   RETURN NEW;
-END;
-$$
-language plpgsql;
+select cc, PGP_SYM_DECRYPT(cc::bytea, 'mykey') from credit_card ;
 
+drop function set_crypted_column;
 
+select set_crypted_column('bdar','credit_card','cc', 'mykey')
+select remove_crypted_column('bdar','credit_card','cc_num')
 
-
-
----------------------
-select cc_num, PGP_SYM_DECRYPT(cc_num::bytea, 'AES_KEY') from credit_card cc;
-
-
-
-
-
-
-
-create trigger test_trigger before insert on credit_card for each row execute procedure crypt_column('cc_num');
 
 drop trigger test_trigger on credit_card;
 
