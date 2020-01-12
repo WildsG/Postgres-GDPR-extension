@@ -1,377 +1,379 @@
--- COMPLAIN IF SCRIPT IS SOURCED IN PSQL, RATHER THAN VIA CREATE EXTENSION
+-- complain if script is sourced in psql, rather than via CREATE EXTENSION
 \echo Use "CREATE EXTENSION bdar_helper" to load this file. \quit
-CREATE SCHEMA IF NOT EXISTS BDAR_TABLES;
+
+CREATE SCHEMA if not exists bdar_tables;
  
-CREATE TABLE IF NOT EXISTS BDAR_TABLES.PRIVATE_ENTITIES(
-	ID SERIAL PRIMARY KEY,
-	SCHEMA_NAME VARCHAR NOT NULL,
-	TABLE_NAME VARCHAR NOT NULL,
-	UNIQUE(SCHEMA_NAME, TABLE_NAME)
+CREATE TABLE IF NOT EXISTS bdar_tables.private_entities(
+	id serial primary key,
+	schema_name varchar not null,
+	table_name varchar not null,
+	unique(schema_name, table_name)
 );
 
-CREATE TABLE IF NOT EXISTS BDAR_TABLES.DELAYED_DELETE_ROWS(
-	ID SERIAL PRIMARY KEY,
-	SCHEMA_NAME VARCHAR NOT NULL,
-	TABLE_NAME VARCHAR NOT NULL,
-	RECORD_ID INTEGER NOT NULL,
-	DELETE_ON TIMESTAMP NOT NULL
+CREATE TABLE IF NOT EXISTS bdar_tables.delayed_delete_rows(
+	id serial primary key,
+	schema_name varchar not null,
+	table_name varchar not null,
+	record_id integer not null,
+	delete_on timestamp not null
 );
 
-CREATE TABLE IF NOT EXISTS BDAR_TABLES.CONF(
-	ID SERIAL PRIMARY KEY,
-	PARAM VARCHAR NOT NULL,
-	VALUE VARCHAR NOT NULL
+CREATE TABLE IF NOT EXISTS bdar_tables.conf(
+	id serial primary key,
+	param varchar not null,
+	value varchar not null
 );
 
-CREATE TABLE IF NOT EXISTS BDAR_TABLES.CRON_LOG(
-	ID SERIAL PRIMARY KEY,
-	QUERY VARCHAR NOT NULL,
-	EXECUTED TIMESTAMP NOT NULL
+CREATE TABLE IF NOT EXISTS bdar_tables.cron_log(
+	id serial primary key,
+	query varchar not null,
+	executed timestamp not null
 );
 
-CREATE TABLE IF NOT EXISTS BDAR_TABLES.POSTGRES_LOG
+CREATE TABLE IF NOT EXISTS bdar_tables.postgres_log
 (
-  LOG_TIME TIMESTAMP(3) WITH TIME ZONE,
-  USER_NAME TEXT,
-  DATABASE_NAME TEXT,
-  PROCESS_ID INTEGER,
-  CONNECTION_FROM TEXT,
-  SESSION_ID TEXT,
-  SESSION_LINE_NUM BIGINT,
-  COMMAND_TAG TEXT,
-  SESSION_START_TIME TIMESTAMP WITH TIME ZONE,
-  VIRTUAL_TRANSACTION_ID TEXT,
-  TRANSACTION_ID BIGINT,
-  ERROR_SEVERITY TEXT,
-  SQL_STATE_CODE TEXT,
-  MESSAGE TEXT,
-  DETAIL TEXT,
-  HINT TEXT,
-  INTERNAL_QUERY TEXT,
-  INTERNAL_QUERY_POS INTEGER,
-  CONTEXT TEXT,
-  QUERY TEXT,
-  QUERY_POS INTEGER,
-  LOCATION TEXT,
-  APPLICATION_NAME TEXT,
-  PRIMARY KEY (SESSION_ID, SESSION_LINE_NUM)
+  log_time timestamp(3) with time zone,
+  user_name text,
+  database_name text,
+  process_id integer,
+  connection_from text,
+  session_id text,
+  session_line_num bigint,
+  command_tag text,
+  session_start_time timestamp with time zone,
+  virtual_transaction_id text,
+  transaction_id bigint,
+  error_severity text,
+  sql_state_code text,
+  message text,
+  detail text,
+  hint text,
+  internal_query text,
+  internal_query_pos integer,
+  context text,
+  query text,
+  query_pos integer,
+  location text,
+  application_name text,
+  PRIMARY KEY (session_id, session_line_num)
 );
 
-CREATE TABLE IF NOT EXISTS BDAR_TABLES.ANON_CONFIG(
-	COMMAND VARCHAR NOT NULL,
-	VALUE VARCHAR[],
-	ANON_LEVEL VARCHAR NOT NULL,
-	PRIMARY KEY(ANON_LEVEL, COMMAND)
+CREATE TABLE IF NOT EXISTS bdar_tables.anon_config(
+	command varchar not null,
+	value varchar[],
+	anon_level varchar not null,
+	primary KEY(anon_level, command)
 );
 
 
-INSERT INTO BDAR_TABLES.CONF(PARAM, VALUE) VALUES('LOCAL', 'TRUE');
-INSERT INTO BDAR_TABLES.CONF(PARAM, VALUE) VALUES('DELETE_WAIT_TIME_MINUTES', '1');
+insert into bdar_tables.conf(param, value) values('local', 'true');
+insert into bdar_tables.conf(param, value) values('delete_wait_time_minutes', '1');
 
-CREATE OR REPLACE FUNCTION ENCRYPT_COLUMN() 
-  RETURNS TRIGGER AS
+CREATE or replace FUNCTION encrypt_column() 
+  RETURNS trigger AS
 $$
-DECLARE
-   V_SQL TEXT;
-   V_SQL1 TEXT;
-  _COL TEXT := QUOTE_IDENT(TG_ARGV[0]);
-BEGIN
-   EXECUTE 'SELECT PGP_SYM_ENCRYPT('||'$1'||'.'||TG_ARGV[0]||','||QUOTE_LITERAL(TG_ARGV[1])||')' USING NEW INTO V_SQL;
-   NEW:= NEW #= HSTORE(_COL, V_SQL);  
+declare
+   v_sql text;
+   v_sql1 text;
+  _col text := quote_ident(TG_ARGV[0]);
+begin
+   execute 'select PGP_SYM_ENCRYPT('||'$1'||'.'||TG_ARGV[0]||','||quote_literal(TG_ARGV[1])||')' using new into v_sql;
+   NEW:= NEW #= hstore(_col, v_sql);  
    RETURN NEW;
 END;
 $$
-LANGUAGE PLPGSQL;
+language plpgsql;
 
-CREATE OR REPLACE FUNCTION SET_CRYPTED_COLUMN(SCHEMA_NAME VARCHAR, TABLE_NAME VARCHAR, COLUMN_NAME VARCHAR, CRYPT_KEY VARCHAR) RETURNS VOID AS
+create or replace function set_crypted_column(schema_name varchar, table_name varchar, column_name varchar, crypt_key varchar) returns void as
 $$
-BEGIN
-	EXECUTE 'CREATE TRIGGER '||SCHEMA_NAME||'_'||TABLE_NAME||'_'||COLUMN_NAME||'_CRYPT'||' BEFORE INSERT ON '||SCHEMA_NAME||'.'||TABLE_NAME||' FOR EACH ROW EXECUTE PROCEDURE ENCRYPT_COLUMN('||QUOTE_LITERAL(COLUMN_NAME)||','||QUOTE_LITERAL(CRYPT_KEY)||');';
-END;
+begin
+	execute 'create trigger '||schema_name||'_'||table_name||'_'||column_name||'_crypt'||' before insert on '||schema_name||'.'||table_name||' for each row execute procedure encrypt_column('||quote_literal(column_name)||','||quote_literal(crypt_key)||');';
+end;
 $$
-LANGUAGE PLPGSQL;
+language plpgsql;
 
-CREATE OR REPLACE FUNCTION REMOVE_CRYPTED_COLUMN(SCHEMA_NAME VARCHAR, TABLE_NAME VARCHAR, COLUMN_NAME VARCHAR) RETURNS VOID AS
+create or replace function remove_crypted_column(schema_name varchar, table_name varchar, column_name varchar) returns void as
 $$
-BEGIN
-	EXECUTE 'DROP TRIGGER '||SCHEMA_NAME||'_'||TABLE_NAME||'_'||COLUMN_NAME||'_CRYPT'||' ON '||SCHEMA_NAME||'.'||TABLE_NAME||';';
-END;
+begin
+	execute 'drop trigger '||schema_name||'_'||table_name||'_'||column_name||'_crypt'||' on '||schema_name||'.'||table_name||';';
+end;
 $$
-LANGUAGE PLPGSQL;
+language plpgsql;
 
 
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('EMAIL',ARRAY['3', '***', '5'], 'LOW');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('PHONE',ARRAY['1','XXXX','3'], 'LOW');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('BIRTH',ARRAY['MONTH'], 'LOW');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('ZIP', ARRAY['50'], 'LOW');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('MASK',ARRAY['5', '***', '5'], 'LOW');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('NUMERIC',ARRAY['50'], 'LOW');
-
-
-
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('EMAIL',ARRAY['2', '*****', '4'], 'MED');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('PHONE',ARRAY['1','XXXXXX','1'], 'MED');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('BIRTH',ARRAY['YEAR'], 'MED');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('ZIP', ARRAY['100'], 'MED');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('MASK',ARRAY['3', '***', '3'], 'MED');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('NUMERIC',ARRAY['100'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('email',array['3', '***', '5'], 'LOW');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',array['1','xxxx','3'], 'LOW');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['month'], 'LOW');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('zip', array['50'], 'LOW');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('mask',array['5', '***', '5'], 'LOW');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('numeric',array['50'], 'LOW');
 
 
 
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('EMAIL',ARRAY['1', '******', '2'], 'HIGH');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('PHONE',ARRAY['2','XXXXXX','0'], 'HIGH');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('BIRTH',ARRAY['DECADE'], 'HIGH');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('ZIP', ARRAY['1000'], 'HIGH');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('MASK',ARRAY['0', '***', '0'], 'HIGH');
-INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES ('NUMERIC',ARRAY['1000'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('email',array['2', '*****', '4'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',array['1','xxxxxx','1'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['year'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('zip', array['100'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('mask',array['3', '***', '3'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('numeric',array['100'], 'MED');
 
 
-CREATE OR REPLACE FUNCTION BDAR_ANONIMYZE(ANON_LVL VARCHAR, VIEW_NAME VARCHAR, COMMANDS VARCHAR[]) RETURNS VOID AS 
+
+insert into bdar_tables.anon_config(command, value, anon_level) values ('email',array['1', '******', '2'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',array['2','xxxxxx','0'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['decade'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('zip', array['1000'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('mask',array['0', '***', '0'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('numeric',array['1000'], 'HIGH');
+
+
+create or replace function bdar_anonimyze(anon_lvl varchar, view_name varchar, commands varchar[]) returns void as 
 $$
-DECLARE
-	V_SQL TEXT;
-	COUNTER INTEGER;
-	DELETE_SQL TEXT;
-	RD RECORD;
-	RECORD_COUNT INTEGER;
-	COLUMN_COMMAND TEXT;
-	STRINGIFIED TEXT;
-	ARR TEXT[];
-BEGIN
-	COUNTER:= 1;
-	RECORD_COUNT:= (SELECT
-		COUNT(C.COLUMN_NAME)
-	FROM
-		INFORMATION_SCHEMA.TABLES T
-	LEFT JOIN INFORMATION_SCHEMA.COLUMNS C ON
-		T.TABLE_SCHEMA = C.TABLE_SCHEMA
-		AND T.TABLE_NAME = C.TABLE_NAME
-	WHERE
-		TABLE_TYPE = 'VIEW'
-		AND T.TABLE_SCHEMA NOT IN ('INFORMATION_SCHEMA','PG_CATALOG','ANON')
-		AND T.TABLE_NAME = VIEW_NAME);
-	-- TODO LENGTH CHECK
+declare
+	v_sql text;
+	counter integer;
+	delete_sql text;
+	rd record;
+	record_count integer;
+	column_command text;
+	stringified text;
+	arr text[];
+begin
+	counter:= 1;
+	record_count:= (select
+		count(c.column_name)
+	from
+		information_schema.tables t
+	left join information_schema.columns c on
+		t.table_schema = c.table_schema
+		and t.table_name = c.table_name
+	where
+		table_type = 'VIEW'
+		and t.table_schema not in ('information_schema','pg_catalog','anon')
+		and t.table_name = view_name);
+	-- TODO length check
 	------------------------------------------------------------------------
-	V_SQL:= 'CREATE OR REPLACE VIEW '||VIEW_NAME||'_ANONIMYZED AS
+	v_sql:= 'create or replace VIEW '||view_name||'_anonimyzed AS
 	SELECT ';
-    FOR RD IN (SELECT
-		C.COLUMN_NAME
-	FROM
-		INFORMATION_SCHEMA.TABLES T
-	LEFT JOIN INFORMATION_SCHEMA.COLUMNS C ON
-		T.TABLE_SCHEMA = C.TABLE_SCHEMA
-		AND T.TABLE_NAME = C.TABLE_NAME
-	WHERE
-		TABLE_TYPE = 'VIEW'
-		AND T.TABLE_SCHEMA NOT IN ('INFORMATION_SCHEMA','PG_CATALOG','ANON')
-		AND T.TABLE_NAME = VIEW_NAME
+    for rd in (select
+		c.column_name
+	from
+		information_schema.tables t
+	left join information_schema.columns c on
+		t.table_schema = c.table_schema
+		and t.table_name = c.table_name
+	where
+		table_type = 'VIEW'
+		and t.table_schema not in ('information_schema','pg_catalog','anon')
+		and t.table_name = view_name
 	) 
-    LOOP	
-    	COLUMN_COMMAND:= REGEXP_REPLACE(RD::VARCHAR,'\(|\)', '', 'G');
-		IF COMMANDS[COUNTER] = 'ZIP' THEN
-			SELECT ARRAY_TO_STRING((SELECT VALUE FROM BDAR_TABLES.ANON_CONFIG AC WHERE COMMAND = 'ZIP' AND AC.ANON_LEVEL = ANON_LVL), ',', '*') INTO STRINGIFIED;
-   			COLUMN_COMMAND:= 'ANON.GENERALIZE_INT4RANGE('||COLUMN_COMMAND||'::INTEGER,'||STRINGIFIED||') AS '||COLUMN_COMMAND;
+    loop	
+    	column_command:= regexp_replace(rd::varchar,'\(|\)', '', 'g');
+		IF commands[counter] = 'zip' then
+			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip' and ac.anon_level = anon_lvl), ',', '*') into stringified;
+   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
 		END IF;
-		IF COMMANDS[COUNTER] = 'EMAIL' THEN
-			SELECT VALUE FROM BDAR_TABLES.ANON_CONFIG AC WHERE COMMAND = 'EMAIL' AND AC.ANON_LEVEL = ANON_LVL INTO ARR;
-   			COLUMN_COMMAND:= 'ANON.PARTIAL('||COLUMN_COMMAND||','||ARR[1]||','||QUOTE_LITERAL(ARR[2])||','||ARR[3]||') AS '||COLUMN_COMMAND;
+		IF commands[counter] = 'email' then
+			select value from bdar_tables.anon_config ac where command = 'email' and ac.anon_level = anon_lvl into arr;
+   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
 		END IF;
-		IF COMMANDS[COUNTER] = 'PHONE' THEN
-			SELECT VALUE FROM BDAR_TABLES.ANON_CONFIG AC WHERE COMMAND = 'PHONE' AND AC.ANON_LEVEL = ANON_LVL INTO ARR;
-   			COLUMN_COMMAND:= 'ANON.PARTIAL('||COLUMN_COMMAND||','||ARR[1]||','||QUOTE_LITERAL(ARR[2])||','||ARR[3]||') AS '||COLUMN_COMMAND;
+		IF commands[counter] = 'phone' then
+			select value from bdar_tables.anon_config ac where command = 'phone' and ac.anon_level = anon_lvl into arr;
+   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
 		END IF;
-		IF COMMANDS[COUNTER] = 'BIRTH' THEN
-			SELECT ARRAY_TO_STRING((SELECT VALUE FROM BDAR_TABLES.ANON_CONFIG AC WHERE COMMAND = 'ZIP'  AND AC.ANON_LEVEL = ANON_LVL), ',', '*') INTO STRINGIFIED;
-   			COLUMN_COMMAND:= 'ANON.GENERALIZE_INT4RANGE('||COLUMN_COMMAND||'::INTEGER,'||STRINGIFIED||') AS '||COLUMN_COMMAND;
+		IF commands[counter] = 'birth' then
+			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip'  and ac.anon_level = anon_lvl), ',', '*') into stringified;
+   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
 		END IF;
-    	V_SQL:= V_SQL||COLUMN_COMMAND||',';
-    	COUNTER:= COUNTER + 1;
-    END LOOP;
-    V_SQL:= LEFT(V_SQL,LENGTH(V_SQL)-1)||' FROM '||VIEW_NAME||';';
-   	DELETE_SQL:= 'DROP VIEW IF EXISTS '||VIEW_NAME||'_ANONIMYZED;';
-   	EXECUTE DELETE_SQL;
-    EXECUTE V_SQL;
-END;
+    	v_sql:= v_sql||column_command||',';
+    	counter:= counter + 1;
+    end loop;
+    v_sql:= LEFT(v_sql,length(v_sql)-1)||' from '||view_name||';';
+   	delete_sql:= 'DROP VIEW IF EXISTS '||view_name||'_anonimyzed;';
+   	execute delete_sql;
+    execute v_sql;
+end;
 $$
 LANGUAGE PLPGSQL;
 
-CREATE OR REPLACE FUNCTION BDAR_ANONIMYZE_COLUMN(ANON_LVL VARCHAR, VIEW_NAME VARCHAR, COLUMN_NAME VARCHAR, V_COMMAND VARCHAR) RETURNS VOID AS 
+create or replace function bdar_anonimyze_column(anon_lvl varchar, view_name varchar, column_name varchar, v_command varchar) returns void as 
 $$
-DECLARE
-	V_SQL TEXT;
-	DELETE_SQL TEXT;
-	RD RECORD;
-	COLUMN_COMMAND TEXT;
-	STRINGIFIED TEXT;
-	ARR TEXT[];
-BEGIN
+declare
+	v_sql text;
+	delete_sql text;
+	rd record;
+	column_command text;
+	stringified text;
+	arr text[];
+begin
 	------------------------------------------------------------------------
-	--SELECT ANON.LOAD();
-	V_SQL:= 'CREATE OR REPLACE VIEW '||VIEW_NAME||'_ANONIMYZED AS
+	--SELECT anon.load();
+	v_sql:= 'create or replace VIEW '||view_name||'_anonimyzed AS
 	SELECT ';
-    FOR RD IN (SELECT
-		C.COLUMN_NAME
-	FROM
-		INFORMATION_SCHEMA.TABLES T
-	LEFT JOIN INFORMATION_SCHEMA.COLUMNS C ON
-		T.TABLE_SCHEMA = C.TABLE_SCHEMA
-		AND T.TABLE_NAME = C.TABLE_NAME
-	WHERE
-		TABLE_TYPE = 'VIEW'
-		AND T.TABLE_SCHEMA NOT IN ('INFORMATION_SCHEMA','PG_CATALOG','ANON')
-		AND T.TABLE_NAME = VIEW_NAME
+    for rd in (select
+		c.column_name
+	from
+		information_schema.tables t
+	left join information_schema.columns c on
+		t.table_schema = c.table_schema
+		and t.table_name = c.table_name
+	where
+		table_type = 'VIEW'
+		and t.table_schema not in ('information_schema','pg_catalog','anon')
+		and t.table_name = view_name
 	) 
-    LOOP	
-    	COLUMN_COMMAND:= REGEXP_REPLACE(RD::VARCHAR,'\(|\)', '', 'G');
-    	IF COLUMN_COMMAND = COLUMN_NAME THEN
-		IF V_COMMAND = 'ZIP' THEN
-			SELECT ARRAY_TO_STRING((SELECT VALUE FROM BDAR_TABLES.ANON_CONFIG AC WHERE COMMAND = 'ZIP' AND AC.ANON_LEVEL = ANON_LVL), ',', '*') INTO STRINGIFIED;
-   			COLUMN_COMMAND:= 'ANON.GENERALIZE_INT4RANGE('||COLUMN_COMMAND||'::INTEGER,'||STRINGIFIED||') AS '||COLUMN_COMMAND;
+    loop	
+    	column_command:= regexp_replace(rd::varchar,'\(|\)', '', 'g');
+    	if column_command = column_name then
+		IF v_command = 'zip' then
+			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip' and ac.anon_level = anon_lvl), ',', '*') into stringified;
+   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
 		END IF;
-		IF V_COMMAND = 'EMAIL' THEN
-			SELECT VALUE FROM BDAR_TABLES.ANON_CONFIG AC WHERE COMMAND = 'EMAIL' AND AC.ANON_LEVEL = ANON_LVL INTO ARR;
-   			COLUMN_COMMAND:= 'ANON.PARTIAL('||COLUMN_COMMAND||','||ARR[1]||','||QUOTE_LITERAL(ARR[2])||','||ARR[3]||') AS '||COLUMN_COMMAND;
+		IF v_command = 'email' then
+			select value from bdar_tables.anon_config ac where command = 'email' and ac.anon_level = anon_lvl into arr;
+   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
 		END IF;
-		IF V_COMMAND = 'PHONE' THEN
-			SELECT VALUE FROM BDAR_TABLES.ANON_CONFIG AC WHERE COMMAND = 'PHONE' AND AC.ANON_LEVEL = ANON_LVL INTO ARR;
-   			COLUMN_COMMAND:= 'ANON.PARTIAL('||COLUMN_COMMAND||','||ARR[1]||','||QUOTE_LITERAL(ARR[2])||','||ARR[3]||') AS '||COLUMN_COMMAND;
+		IF v_command = 'phone' then
+			select value from bdar_tables.anon_config ac where command = 'phone' and ac.anon_level = anon_lvl into arr;
+   			column_command:= 'anon.partial('||column_command||','||arr[1]||','||quote_literal(arr[2])||','||arr[3]||') AS '||column_command;
 		END IF;
-		IF V_COMMAND = 'BIRTH' THEN
-			SELECT ARRAY_TO_STRING((SELECT VALUE FROM BDAR_TABLES.ANON_CONFIG AC WHERE COMMAND = 'ZIP'  AND AC.ANON_LEVEL = ANON_LVL), ',', '*') INTO STRINGIFIED;
-   			COLUMN_COMMAND:= 'ANON.GENERALIZE_INT4RANGE('||COLUMN_COMMAND||'::INTEGER,'||STRINGIFIED||') AS '||COLUMN_COMMAND;
+		IF v_command = 'birth' then
+			select array_to_string((select value from bdar_tables.anon_config ac where command = 'zip'  and ac.anon_level = anon_lvl), ',', '*') into stringified;
+   			column_command:= 'anon.generalize_int4range('||column_command||'::INTEGER,'||stringified||') AS '||column_command;
 		END IF;
-		END IF;
-    	V_SQL:= V_SQL||COLUMN_COMMAND||',';
-    END LOOP;
-    V_SQL:= LEFT(V_SQL,LENGTH(V_SQL)-1)||' FROM '||VIEW_NAME||';';
-   	DELETE_SQL:= 'DROP VIEW IF EXISTS '||VIEW_NAME||'_ANONIMYZED;';
-   	EXECUTE DELETE_SQL;
-    EXECUTE V_SQL;
-END;
+		end if;
+    	v_sql:= v_sql||column_command||',';
+    end loop;
+    v_sql:= LEFT(v_sql,length(v_sql)-1)||' from '||view_name||';';
+   	delete_sql:= 'DROP VIEW IF EXISTS '||view_name||'_anonimyzed;';
+   	execute delete_sql;
+    execute v_sql;
+end;
 $$
 LANGUAGE PLPGSQL;
 
-CREATE OR REPLACE FUNCTION ADD_ANON_RULE(V_COMMAND VARCHAR,VALUE VARCHAR[],  ANON_LVL VARCHAR) 
-RETURNS TEXT AS $$
-DECLARE
-    V_ID TEXT;
-BEGIN
-	INSERT INTO BDAR_TABLES.ANON_CONFIG(COMMAND, VALUE, ANON_LEVEL) VALUES (V_COMMAND,VALUE, ANON_LVL)
-	RETURNING V_COMMAND INTO V_ID;
-RETURN V_ID;
-END;
+create or replace function add_anon_rule(v_command varchar,value varchar[],  anon_lvl varchar) 
+returns text as $$
+declare
+    v_id text;
+begin
+	insert into bdar_tables.anon_config(command, value, anon_level) values (v_command,value, anon_lvl)
+	returning v_command into v_id;
+return v_id;
+end;
 $$
 LANGUAGE PLPGSQL;
 
-CREATE OR REPLACE FUNCTION REMOVE_ANON_RULE(V_COMMAND VARCHAR,  ANON_LVL VARCHAR) 
-RETURNS TEXT AS $$
-DECLARE
-    V_ID TEXT;
-BEGIN
-	DELETE FROM BDAR_TABLES.ANON_CONFIG WHERE V_COMMAND = COMMAND AND ANON_LEVEL = ANON_LVL
-	RETURNING V_COMMAND INTO V_ID;
-RETURN V_ID;
-END;
+create or replace function remove_anon_rule(v_command varchar,  anon_lvl varchar) 
+returns text as $$
+declare
+    v_id text;
+begin
+	delete from bdar_tables.anon_config where v_command = command and anon_level = anon_lvl
+	returning v_command into v_id;
+return v_id;
+end;
 $$
 LANGUAGE PLPGSQL;
 
 
-CREATE OR REPLACE FUNCTION BDAR_SHOW_ACTIVITY_LOG() RETURNS TABLE (
-  LOG_TIME TIMESTAMP(3) WITH TIME ZONE,
-  USER_NAME TEXT,
-  DATABASE_NAME TEXT,
-  PROCESS_ID INTEGER,
-  CONNECTION_FROM TEXT,
-  SESSION_ID TEXT,
-  SESSION_LINE_NUM BIGINT,
-  COMMAND_TAG TEXT,
-  SESSION_START_TIME TIMESTAMP WITH TIME ZONE,
-  VIRTUAL_TRANSACTION_ID TEXT,
-  TRANSACTION_ID BIGINT,
-  ERROR_SEVERITY TEXT,
-  SQL_STATE_CODE TEXT,
-  MESSAGE TEXT,
-  DETAIL TEXT,
-  HINT TEXT,
-  INTERNAL_QUERY TEXT,
-  INTERNAL_QUERY_POS INTEGER,
-  CONTEXT TEXT,
-  QUERY TEXT,
-  QUERY_POS INTEGER,
-  LOCATION TEXT,
-  APPLICATION_NAME TEXT
+create or replace function bdar_show_activity_log() RETURNS TABLE (
+  log_time timestamp(3) with time zone,
+  user_name text,
+  database_name text,
+  process_id integer,
+  connection_from text,
+  session_id text,
+  session_line_num bigint,
+  command_tag text,
+  session_start_time timestamp with time zone,
+  virtual_transaction_id text,
+  transaction_id bigint,
+  error_severity text,
+  sql_state_code text,
+  message text,
+  detail text,
+  hint text,
+  internal_query text,
+  internal_query_pos integer,
+  context text,
+  query text,
+  query_pos integer,
+  location text,
+  application_name text
 )
 AS $$
-DECLARE
-    V_SELECT_Q VARCHAR;
-   	DIR VARCHAR;
-BEGIN 
-	CREATE TEMP TABLE TMP_TABLE 
-	ON COMMIT DROP AS
-	SELECT * FROM BDAR_TABLES.POSTGRES_LOG WITH NO DATA;
-	SELECT  SETTING FROM PG_CATALOG.PG_SETTINGS WHERE NAME = 'DATA_DIRECTORY' INTO DIR;
-	V_SELECT_Q := 'COPY TMP_TABLE FROM PROGRAM '||' ''CAT '||DIR||'/LOG/*.CSV'' WITH CSV';
-	EXECUTE V_SELECT_Q ;
-	INSERT INTO BDAR_TABLES.POSTGRES_LOG 
-	SELECT * FROM TMP_TABLE T WHERE NOT EXISTS (SELECT * FROM BDAR_TABLES.POSTGRES_LOG P WHERE P.SESSION_ID = T.SESSION_ID AND P.SESSION_LINE_NUM = T.SESSION_LINE_NUM);
-	RETURN QUERY SELECT * FROM BDAR_TABLES.POSTGRES_LOG PL;
-END;
+declare
+    v_select_q varchar;
+   	dir varchar;
+begin 
+	CREATE TEMP TABLE tmp_table 
+	ON COMMIT drop AS
+	SELECT * FROM bdar_tables.postgres_log WITH NO DATA;
+	select  setting from pg_catalog.pg_settings where name = 'data_directory' into dir;
+	v_select_q := 'copy tmp_table from program '||' ''cat '||dir||'/log/*.csv'' with csv';
+	raise notice '%', v_select_q;
+	execute v_select_q ;
+	INSERT INTO bdar_tables.postgres_log 
+	SELECT * FROM tmp_table t where not exists (select * from bdar_tables.postgres_log p where p.session_id = t.session_id and p.session_line_num = t.session_line_num);
+	RETURN query select * from bdar_tables.postgres_log pl;
+end;
 $$
 LANGUAGE PLPGSQL;
 
-CREATE OR REPLACE FUNCTION ADD_PRIVATE_ENTITY(P_SCHEMA VARCHAR, P_TABLE VARCHAR) 
-RETURNS INTEGER AS $$
-DECLARE
-    V_ID INTEGER;
-BEGIN
-	INSERT INTO BDAR_TABLES.PRIVATE_ENTITIES (SCHEMA_NAME, TABLE_NAME) VALUES (P_SCHEMA, P_TABLE)
-	RETURNING ID INTO V_ID;
-RETURN V_ID;
-END;
+create or replace function add_private_entity(p_schema varchar, p_table varchar) 
+returns integer as $$
+declare
+    v_id integer;
+begin
+	INSERT INTO bdar_tables.private_entities (schema_name, table_name) values (p_schema, p_table)
+	returning id into v_id;
+return v_id;
+end;
 $$
 LANGUAGE PLPGSQL;
 
-CREATE OR REPLACE FUNCTION REMOVE_PRIVATE_ENTITY(P_SCHEMA VARCHAR, P_TABLE VARCHAR) 
-RETURNS INTEGER AS $$
-DECLARE
-    V_ID INTEGER;
-BEGIN
-	DELETE FROM BDAR_TABLES.PRIVATE_ENTITIES WHERE SCHEMA_NAME = P_SCHEMA AND TABLE_NAME = P_TABLE 
-	RETURNING ID INTO V_ID;
-RETURN V_ID;
-END;
+create or replace function remove_private_entity(p_schema varchar, p_table varchar) 
+returns integer as $$
+declare
+    v_id integer;
+begin
+	delete from bdar_tables.private_entities where schema_name = p_schema and table_name = p_table 
+	returning id into v_id;
+return v_id;
+end;
 $$
 LANGUAGE PLPGSQL;
 
-CREATE OR REPLACE FUNCTION UPDATE_PARAMETER(PARAMETER_NAME VARCHAR, PARAMETER_VALUE VARCHAR) 
-RETURNS VARCHAR AS $$
-DECLARE
-    V_ID VARCHAR;
-BEGIN
-	UPDATE BDAR_TABLES.CONF SET VALUE = PARAMETER_VALUE WHERE PARAM = PARAMETER_NAME
-	RETURNING PARAMETER_VALUE INTO V_ID;
-	IF(V_ID IS NULL) THEN
-		RAISE EXCEPTION 'NO SUCH PARAMETER WITH % NAME', PARAMETER_NAME;
-	END IF;
-RETURN V_ID;
-END;
+create or replace function update_parameter(parameter_name varchar, parameter_value varchar) 
+returns varchar as $$
+declare
+    v_id varchar;
+begin
+	update bdar_tables.conf set value = parameter_value where param = parameter_name
+	returning parameter_value into v_id;
+	if(v_id is null) then
+		raise exception 'no such parameter with % name', parameter_name;
+	end if;
+return v_id;
+end;
 $$
 LANGUAGE PLPGSQL;
 
--- THIS FUCNTIONS IS FOR CRON USE, not used currently
-CREATE OR REPLACE FUNCTION BDAR_DELETE() RETURNS INTEGER AS $$
-DECLARE
-    REC RECORD;
-    V_SELECT_Q VARCHAR;
+-- This fucntions is for cron use
+CREATE or replace FUNCTION bdar_delete() RETURNS integer AS $$
+declare
+    rec record;
+    v_select_q varchar;
 BEGIN
-INSERT INTO BDAR_TABLES.CRON_LOG(QUERY, EXECUTED) VALUES ('HEARTBEAT', CURRENT_TIMESTAMP);
-FOR REC IN
-    (SELECT * FROM BDAR_TABLES.DELAYED_DELETE_ROWS  WHERE DELETE_ON < NOW() ORDER BY ID ASC)
-LOOP
-	V_SELECT_Q := 'DELETE FROM '||REC.SCHEMA_NAME||'.'||REC.TABLE_NAME||' WHERE ID='||QUOTE_LITERAL(REC.RECORD_ID);
-    EXECUTE V_SELECT_Q;
-    DELETE FROM BDAR_TABLES.DELAYED_DELETE_ROWS DDR WHERE REC.ID = DDR.ID;
-    INSERT INTO BDAR_TABLES.CRON_LOG(QUERY, EXECUTED) VALUES (V_SELECT_Q, CURRENT_TIMESTAMP);
+INSERT INTO bdar_tables.cron_log(query, executed) VALUES ('heartbeat', current_timestamp);
+FOR rec IN
+    (SELECT * FROM bdar_tables.delayed_delete_rows  WHERE delete_on < now() ORDER BY id asc)
+loop
+	v_select_q := 'delete from '||rec.schema_name||'.'||rec.table_name||' where id='||quote_literal(rec.record_id);
+    execute v_select_q;
+    delete from bdar_tables.delayed_delete_rows ddr where rec.id = ddr.id;
+    INSERT INTO bdar_tables.cron_log(query, executed) VALUES (v_select_q, current_timestamp);
 END LOOP;
 RETURN 0;
 END; $$
@@ -379,181 +381,206 @@ LANGUAGE PLPGSQL;
 
 
 -- DEPENDENCIES
-SELECT CRON.SCHEDULE('* * * * *', $JOB$
-DO $$ DECLARE
-    REC RECORD;
-    V_SELECT_Q VARCHAR;
+SELECT cron.schedule('* * * * *', $job$
+do $$ declare
+    rec record;
+    v_select_q varchar;
 BEGIN
-INSERT INTO BDAR_TABLES.CRON_LOG(QUERY, EXECUTED) VALUES ('HEARTBEAT1', CURRENT_TIMESTAMP);
-FOR REC IN
-    (SELECT * FROM BDAR_TABLES.DELAYED_DELETE_ROWS  WHERE DELETE_ON < NOW() ORDER BY ID ASC)
-LOOP
-	V_SELECT_Q := 'DELETE FROM '||REC.SCHEMA_NAME||'.'||REC.TABLE_NAME||' WHERE ID='||QUOTE_LITERAL(REC.RECORD_ID);
-    EXECUTE V_SELECT_Q;
-    DELETE FROM BDAR_TABLES.DELAYED_DELETE_ROWS DDR WHERE REC.ID = DDR.ID;
-    INSERT INTO BDAR_TABLES.CRON_LOG(QUERY, EXECUTED) VALUES (V_SELECT_Q, CURRENT_TIMESTAMP);
+INSERT INTO bdar_tables.cron_log(query, executed) VALUES ('heartbeat1', current_timestamp);
+FOR rec IN
+    (SELECT * FROM bdar_tables.delayed_delete_rows  WHERE delete_on < now() ORDER BY id asc)
+loop
+	v_select_q := 'delete from '||rec.schema_name||'.'||rec.table_name||' where id='||quote_literal(rec.record_id);
+    execute v_select_q;
+    delete from bdar_tables.delayed_delete_rows ddr where rec.id = ddr.id;
+    INSERT INTO bdar_tables.cron_log(query, executed) VALUES (v_select_q, current_timestamp);
 END LOOP;
 END; $$
-$JOB$);
+$job$);
 
 
--- DELETE OR DISCONNECT ALL RECORDS RELATED TO ONE SELECTED AND ALSO SELECTED
--- BASIC CONFIGURATION: IF COLUMN NOT NULL - DELETES ELSE IF COLUMN NULLABLE, DISCONECTS ENTITIES
-CREATE OR REPLACE FUNCTION BDAR_FORGET(P_SCHEMA VARCHAR, P_TABLE VARCHAR, P_KEY VARCHAR, P_RECURSION VARCHAR[] DEFAULT NULL, FOREIGN_COLUMN VARCHAR DEFAULT NULL)
-RETURNS INTEGER AS $$
-DECLARE
-    RX RECORD;
-    RD RECORD;
-    V_SQL VARCHAR;
-    V_IS_NULLABLE VARCHAR;
-    V_RECURSION_KEY VARCHAR;
-    RECNUM INTEGER;
-    V_PRIMARY_KEY VARCHAR;
-    V_ROWS INTEGER;
-   	RET_VAL VARCHAR;
-    V_INSERT_SQL VARCHAR;
-    V_DELETE_AFTER INTEGER;
-BEGIN
-    RECNUM := 0;
-    SELECT CCU.COLUMN_NAME INTO V_PRIMARY_KEY
-        FROM
-        INFORMATION_SCHEMA.TABLE_CONSTRAINTS  TC
-        JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE AS CCU ON CCU.CONSTRAINT_NAME = TC.CONSTRAINT_NAME AND CCU.CONSTRAINT_SCHEMA=TC.CONSTRAINT_SCHEMA
-        AND TC.CONSTRAINT_TYPE='PRIMARY KEY'
-        AND TC.TABLE_NAME=P_TABLE
-        AND TC.TABLE_SCHEMA=P_SCHEMA;
+-- delete or disconnect all records related to one selected and also selected
+-- basic configuration: if column not null - deletes else if column nullable, disconects entities
+create or replace function bdar_forget(p_schema varchar, p_table varchar, p_key varchar, p_recursion varchar[] default null, foreign_column varchar default null)
+returns integer as $$
+declare
+    rx record;
+    rd record;
+    v_sql varchar;
+    v_is_nullable varchar;
+    v_recursion_key varchar;
+    recnum integer;
+    v_primary_key varchar;
+    v_rows integer;
+   	ret_val varchar;
+    v_insert_sql varchar;
+    v_delete_after integer;
+begin
+	raise notice 'Info %',foreign_column;
+    recnum := 0;
+    select ccu.column_name into v_primary_key
+        from
+        information_schema.table_constraints  tc
+        join information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name and ccu.constraint_schema=tc.constraint_schema
+        and tc.constraint_type='PRIMARY KEY'
+        and tc.table_name=p_table
+        and tc.table_schema=p_schema;
 
-    FOR RX IN (
-        SELECT KCU.TABLE_NAME AS FOREIGN_TABLE_NAME, 
-        KCU.COLUMN_NAME AS FOREIGN_COLUMN_NAME, 
-        KCU.TABLE_SCHEMA FOREIGN_TABLE_SCHEMA,
-        KCU2.COLUMN_NAME AS FOREIGN_TABLE_PRIMARY_KEY
-        FROM INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE CCU
-        JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC ON TC.CONSTRAINT_NAME=CCU.CONSTRAINT_NAME AND TC.CONSTRAINT_CATALOG=CCU.CONSTRAINT_CATALOG AND CCU.CONSTRAINT_SCHEMA=CCU.CONSTRAINT_SCHEMA 
-        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE KCU ON KCU.CONSTRAINT_NAME=CCU.CONSTRAINT_NAME AND KCU.CONSTRAINT_CATALOG=CCU.CONSTRAINT_CATALOG AND KCU.CONSTRAINT_SCHEMA=CCU.CONSTRAINT_SCHEMA
-        JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC2 ON TC2.TABLE_NAME=KCU.TABLE_NAME AND TC2.TABLE_SCHEMA=KCU.TABLE_SCHEMA
-        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE KCU2 ON KCU2.CONSTRAINT_NAME=TC2.CONSTRAINT_NAME AND KCU2.CONSTRAINT_CATALOG=TC2.CONSTRAINT_CATALOG AND KCU2.CONSTRAINT_SCHEMA=TC2.CONSTRAINT_SCHEMA
-        WHERE CCU.TABLE_NAME=P_TABLE  AND CCU.TABLE_SCHEMA=P_SCHEMA
-        AND TC.CONSTRAINT_TYPE='FOREIGN KEY'
-        AND TC2.CONSTRAINT_TYPE='PRIMARY KEY'
+    for rx in (
+        select kcu.table_name as foreign_table_name, 
+        kcu.column_name as foreign_column_name, 
+        kcu.table_schema foreign_table_schema,
+        kcu2.column_name as foreign_table_primary_key
+        from information_schema.constraint_column_usage ccu
+        join information_schema.table_constraints tc on tc.constraint_name=ccu.constraint_name and tc.constraint_catalog=ccu.constraint_catalog and ccu.constraint_schema=ccu.constraint_schema 
+        join information_schema.key_column_usage kcu on kcu.constraint_name=ccu.constraint_name and kcu.constraint_catalog=ccu.constraint_catalog and kcu.constraint_schema=ccu.constraint_schema
+        join information_schema.table_constraints tc2 on tc2.table_name=kcu.table_name and tc2.table_schema=kcu.table_schema
+        join information_schema.key_column_usage kcu2 on kcu2.constraint_name=tc2.constraint_name and kcu2.constraint_catalog=tc2.constraint_catalog and kcu2.constraint_schema=tc2.constraint_schema
+        where ccu.table_name=p_table  and ccu.table_schema=p_schema
+        and TC.CONSTRAINT_TYPE='FOREIGN KEY'
+        and tc2.constraint_type='PRIMARY KEY'
 	)
-    LOOP
-        V_SQL := 'SELECT '||RX.FOREIGN_TABLE_PRIMARY_KEY||' AS KEY FROM '||RX.FOREIGN_TABLE_SCHEMA||'.'||RX.FOREIGN_TABLE_NAME||'
-            WHERE '||RX.FOREIGN_COLUMN_NAME||'='||QUOTE_LITERAL(P_KEY)||' FOR UPDATE';
-        FOR RD IN EXECUTE V_SQL
-        LOOP
-            V_RECURSION_KEY=RX.FOREIGN_TABLE_SCHEMA||'.'||RX.FOREIGN_TABLE_NAME||'.'||RX.FOREIGN_COLUMN_NAME||'='||RD.KEY;
-            IF (V_RECURSION_KEY = ANY (P_RECURSION)) THEN
-                RAISE NOTICE 'AVOIDING INFINITE LOOP';
-            ELSE
-                RECNUM:= RECNUM +BDAR_FORGET(RX.FOREIGN_TABLE_SCHEMA::VARCHAR, RX.FOREIGN_TABLE_NAME::VARCHAR, RD.KEY::VARCHAR, P_RECURSION||V_RECURSION_KEY,  RX.FOREIGN_COLUMN_NAME::VARCHAR);
-            END IF;
-        END LOOP;
-    END LOOP;
-    BEGIN
-    V_IS_NULLABLE := 'SELECT IS_NULLABLE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '||QUOTE_LITERAL(P_SCHEMA)||' AND TABLE_NAME ='||QUOTE_LITERAL(P_TABLE)||' AND COLUMN_NAME ='||QUOTE_LITERAL(FOREIGN_COLUMN);
-   	IF(V_IS_NULLABLE IS NOT NULL) THEN
-   		EXECUTE V_IS_NULLABLE INTO RET_VAL;
-   	END IF;   
-    V_SQL := 'DELETE FROM '||P_SCHEMA||'.'||P_TABLE||' WHERE '||V_PRIMARY_KEY||'='||QUOTE_LITERAL(P_KEY);
-   	IF(RET_VAL = 'YES') THEN
-   		V_SQL := 'UPDATE '||P_SCHEMA||'.'||P_TABLE||' SET '||FOREIGN_COLUMN||'= NULL WHERE '||V_PRIMARY_KEY||'='||QUOTE_LITERAL(P_KEY);
-   		V_DELETE_AFTER:= (SELECT C.VALUE FROM BDAR_TABLES.CONF C WHERE C.PARAM = 'DELETE_WAIT_TIME_MINUTES');
-		V_INSERT_SQL:= FORMAT('INSERT INTO BDAR_TABLES.DELAYED_DELETE_ROWS (SCHEMA_NAME, TABLE_NAME, RECORD_ID, DELETE_ON) VALUES(%S,%S,%S,%S)',
-   							  QUOTE_LITERAL(P_SCHEMA),QUOTE_LITERAL(P_TABLE),P_KEY, QUOTE_LITERAL(CURRENT_TIMESTAMP + (V_DELETE_AFTER * INTERVAL '1 MINUTE')));
-   		EXECUTE V_INSERT_SQL;
-    END IF;
+    loop
+        v_sql := 'select '||rx.foreign_table_primary_key||' as key from '||rx.foreign_table_schema||'.'||rx.foreign_table_name||'
+            where '||rx.foreign_column_name||'='||quote_literal(p_key)||' for update';
+        raise notice '%',v_sql;
+        --found a foreign key, now find the primary keys for any data that exists in any of those tables.
+        for rd in execute v_sql
+        loop
+            v_recursion_key=rx.foreign_table_schema||'.'||rx.foreign_table_name||'.'||rx.foreign_column_name||'='||rd.key;
+             raise notice '%',v_recursion_key;
+            if (v_recursion_key = any (p_recursion)) then
+                raise notice 'Avoiding infinite loop';
+            else
+                raise notice 'Recursing to %,%',rx.foreign_table_name, rd.key;
+                recnum:= recnum +bdar_forget(rx.foreign_table_schema::varchar, rx.foreign_table_name::varchar, rd.key::varchar, p_recursion||v_recursion_key,  rx.foreign_column_name::varchar);
+            end if;
+        end loop;
+    end loop;
+    begin
+    --actually delete original record.\
+    v_is_nullable := 'select is_nullable from INFORMATION_SCHEMA.columns where table_schema = '||quote_literal(p_schema)||' and table_name ='||quote_literal(p_table)||' and column_name ='||quote_literal(foreign_column);
+   	if(v_is_nullable is not null) then
+   		execute v_is_nullable into ret_val;
+   	else
+   		raise notice 'test:: %',v_is_nullable; 
+   	end if;
+   	raise notice 'Info %.% %',p_schema,p_table,foreign_column;
+   
+    v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
+   	if(ret_val = 'YES') then
+   		v_sql := 'update '||p_schema||'.'||p_table||' set '||foreign_column||'= NULL where '||v_primary_key||'='||quote_literal(p_key);
+   		v_delete_after:= (select c.value from bdar_tables.conf c where c.param = 'delete_wait_time_minutes');
+		v_insert_sql:= FORMAT('insert into bdar_tables.delayed_delete_rows (schema_name, table_name, record_id, delete_on) VALUES(%s,%s,%s,%s)',
+   							  quote_literal(p_schema),quote_literal(p_table),p_key, quote_literal(current_timestamp + (v_delete_after * interval '1 minute')));
+     	raise notice '%',v_insert_sql;
+   		execute v_insert_sql;
+   end if;
     
-    EXECUTE V_SQL;
-    GET DIAGNOSTICS V_ROWS= ROW_COUNT;
-    RECNUM:= RECNUM +V_ROWS;
+   	raise notice '%',v_sql;
+    execute v_sql;
+   	--raise notice 'Deleting %.% %=%',p_schema,p_table,v_primary_key,p_key;
+    get diagnostics v_rows= row_count;
+    recnum:= recnum +v_rows;
    
-    EXCEPTION WHEN OTHERS THEN RECNUM=0;
-    END;
+    exception when others then recnum=0;
+    end;
 
-    RETURN RECNUM;
-END;
+    return recnum;
+end;
 $$
-LANGUAGE PLPGSQL;
+language PLPGSQL;
 
--- DELETE OR DISCONNECT ALL RECORDS RELATED TO ONE SELECTED AND ALSO SELECTED
--- CONFIGURABLE: ADD ENTITIES TO PRIVATE_ENTITIES TABLE, SO IT DISCONNECTS THAT DATA, OTHER ENTITIES WILL NOT BE PRIVATE AND WILL JUST IMMEDIATELY DELETE
-CREATE OR REPLACE FUNCTION BDAR_FORGET_CONFIGURED(P_SCHEMA VARCHAR, P_TABLE VARCHAR, P_KEY VARCHAR, P_RECURSION VARCHAR[] DEFAULT NULL, FOREIGN_COLUMN VARCHAR DEFAULT NULL)
- RETURNS INTEGER AS $$
-DECLARE
-    RX RECORD;
-    RD RECORD;
-    V_SQL VARCHAR;
-    V_IS_NULLABLE VARCHAR;
-    V_RECURSION_KEY VARCHAR;
-    RECNUM INTEGER;
-    V_PRIMARY_KEY VARCHAR;
-    V_ROWS INTEGER;
-   	RET_VAL VARCHAR;
-    V_INSERT_SQL VARCHAR;
-    V_DELETE_AFTER INTEGER;
-BEGIN
-    RECNUM := 0;
-    SELECT CCU.COLUMN_NAME INTO V_PRIMARY_KEY
-        FROM
-        INFORMATION_SCHEMA.TABLE_CONSTRAINTS  TC
-        JOIN INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE AS CCU ON CCU.CONSTRAINT_NAME = TC.CONSTRAINT_NAME AND CCU.CONSTRAINT_SCHEMA=TC.CONSTRAINT_SCHEMA
-        AND TC.CONSTRAINT_TYPE='PRIMARY KEY'
-        AND TC.TABLE_NAME=P_TABLE
-        AND TC.TABLE_SCHEMA=P_SCHEMA;
+-- delete or disconnect all records related to one selected and also selected
+-- Configurable: add entities to private_entities table, so it disconnects that data, other entities will not be private and will just immediately delete
+create or replace function bdar_forget_configured(p_schema varchar, p_table varchar, p_key varchar, p_recursion varchar[] default null, foreign_column varchar default null)
+ returns integer as $$
+declare
+    rx record;
+    rd record;
+    v_sql varchar;
+    v_is_nullable varchar;
+    v_recursion_key varchar;
+    recnum integer;
+    v_primary_key varchar;
+    v_rows integer;
+   	ret_val varchar;
+    v_insert_sql varchar;
+    v_delete_after integer;
+begin
+	raise notice 'Info %',foreign_column;
+    recnum := 0;
+    select ccu.column_name into v_primary_key
+        from
+        information_schema.table_constraints  tc
+        join information_schema.constraint_column_usage AS ccu ON ccu.constraint_name = tc.constraint_name and ccu.constraint_schema=tc.constraint_schema
+        and tc.constraint_type='PRIMARY KEY'
+        and tc.table_name=p_table
+        and tc.table_schema=p_schema;
 
-    FOR RX IN (
-        SELECT KCU.TABLE_NAME AS FOREIGN_TABLE_NAME, 
-        KCU.COLUMN_NAME AS FOREIGN_COLUMN_NAME, 
-        KCU.TABLE_SCHEMA FOREIGN_TABLE_SCHEMA,
-        KCU2.COLUMN_NAME AS FOREIGN_TABLE_PRIMARY_KEY
-        FROM INFORMATION_SCHEMA.CONSTRAINT_COLUMN_USAGE CCU
-        JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC ON TC.CONSTRAINT_NAME=CCU.CONSTRAINT_NAME AND TC.CONSTRAINT_CATALOG=CCU.CONSTRAINT_CATALOG AND CCU.CONSTRAINT_SCHEMA=CCU.CONSTRAINT_SCHEMA 
-        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE KCU ON KCU.CONSTRAINT_NAME=CCU.CONSTRAINT_NAME AND KCU.CONSTRAINT_CATALOG=CCU.CONSTRAINT_CATALOG AND KCU.CONSTRAINT_SCHEMA=CCU.CONSTRAINT_SCHEMA
-        JOIN INFORMATION_SCHEMA.TABLE_CONSTRAINTS TC2 ON TC2.TABLE_NAME=KCU.TABLE_NAME AND TC2.TABLE_SCHEMA=KCU.TABLE_SCHEMA
-        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE KCU2 ON KCU2.CONSTRAINT_NAME=TC2.CONSTRAINT_NAME AND KCU2.CONSTRAINT_CATALOG=TC2.CONSTRAINT_CATALOG AND KCU2.CONSTRAINT_SCHEMA=TC2.CONSTRAINT_SCHEMA
-        WHERE CCU.TABLE_NAME=P_TABLE  AND CCU.TABLE_SCHEMA=P_SCHEMA
-        AND TC.CONSTRAINT_TYPE='FOREIGN KEY'
-        AND TC2.CONSTRAINT_TYPE='PRIMARY KEY'
+    for rx in (
+        select kcu.table_name as foreign_table_name, 
+        kcu.column_name as foreign_column_name, 
+        kcu.table_schema foreign_table_schema,
+        kcu2.column_name as foreign_table_primary_key
+        from information_schema.constraint_column_usage ccu
+        join information_schema.table_constraints tc on tc.constraint_name=ccu.constraint_name and tc.constraint_catalog=ccu.constraint_catalog and ccu.constraint_schema=ccu.constraint_schema 
+        join information_schema.key_column_usage kcu on kcu.constraint_name=ccu.constraint_name and kcu.constraint_catalog=ccu.constraint_catalog and kcu.constraint_schema=ccu.constraint_schema
+        join information_schema.table_constraints tc2 on tc2.table_name=kcu.table_name and tc2.table_schema=kcu.table_schema
+        join information_schema.key_column_usage kcu2 on kcu2.constraint_name=tc2.constraint_name and kcu2.constraint_catalog=tc2.constraint_catalog and kcu2.constraint_schema=tc2.constraint_schema
+        where ccu.table_name=p_table  and ccu.table_schema=p_schema
+        and TC.CONSTRAINT_TYPE='FOREIGN KEY'
+        and tc2.constraint_type='PRIMARY KEY'
 	)
-    LOOP
-        V_SQL := 'SELECT '||RX.FOREIGN_TABLE_PRIMARY_KEY||' AS KEY FROM '||RX.FOREIGN_TABLE_SCHEMA||'.'||RX.FOREIGN_TABLE_NAME||'
-            WHERE '||RX.FOREIGN_COLUMN_NAME||'='||QUOTE_LITERAL(P_KEY)||' FOR UPDATE';
-        FOR RD IN EXECUTE V_SQL
-        LOOP
-            V_RECURSION_KEY=RX.FOREIGN_TABLE_SCHEMA||'.'||RX.FOREIGN_TABLE_NAME||'.'||RX.FOREIGN_COLUMN_NAME||'='||RD.KEY;
-            IF (V_RECURSION_KEY = ANY (P_RECURSION)) THEN
-                RAISE NOTICE 'AVOIDING INFINITE LOOP';
-            ELSE
-                RECNUM:= RECNUM +BDAR_FORGET_CONFIGURED(RX.FOREIGN_TABLE_SCHEMA::VARCHAR, RX.FOREIGN_TABLE_NAME::VARCHAR, RD.KEY::VARCHAR, P_RECURSION||V_RECURSION_KEY,  RX.FOREIGN_COLUMN_NAME::VARCHAR);
-            END IF;
-        END LOOP;
-    END LOOP;
-    BEGIN
-    V_SQL := 'DELETE FROM '||P_SCHEMA||'.'||P_TABLE||' WHERE '||V_PRIMARY_KEY||'='||QUOTE_LITERAL(P_KEY);
-    SELECT TABLE_NAME FROM BDAR_TABLES.PRIVATE_ENTITIES 
-    WHERE BDAR_TABLES.PRIVATE_ENTITIES.TABLE_NAME IN(P_TABLE) 
-    AND BDAR_TABLES.PRIVATE_ENTITIES.SCHEMA_NAME IN(P_SCHEMA) INTO RET_VAL;
-    V_SQL := 'DELETE FROM '||P_SCHEMA||'.'||P_TABLE||' WHERE '||V_PRIMARY_KEY||'='||QUOTE_LITERAL(P_KEY);
-    IF(RET_VAL IS NOT NULL) THEN
-   		 V_SQL := 'UPDATE '||P_SCHEMA||'.'||P_TABLE||' SET '||FOREIGN_COLUMN||'= NULL WHERE '||V_PRIMARY_KEY||'='||QUOTE_LITERAL(P_KEY);
-		 V_DELETE_AFTER:= (SELECT C.VALUE FROM BDAR_TABLES.CONF C WHERE C.PARAM = 'DELETE_WAIT_TIME_MINUTES');
-   		 V_INSERT_SQL:= FORMAT('INSERT INTO BDAR_TABLES.DELAYED_DELETE_ROWS (SCHEMA_NAME, TABLE_NAME, RECORD_ID, DELETE_ON) VALUES(%S,%S,%S,%S)',
-   							  QUOTE_LITERAL(P_SCHEMA),QUOTE_LITERAL(P_TABLE),P_KEY, QUOTE_LITERAL(CURRENT_TIMESTAMP + (V_DELETE_AFTER * INTERVAL '1 MINUTE')));   		
-   		EXECUTE V_INSERT_SQL;
-    END IF;
-    EXECUTE V_SQL;
-    GET DIAGNOSTICS V_ROWS= ROW_COUNT;
-    RECNUM:= RECNUM +V_ROWS;
+    loop
+        v_sql := 'select '||rx.foreign_table_primary_key||' as key from '||rx.foreign_table_schema||'.'||rx.foreign_table_name||'
+            where '||rx.foreign_column_name||'='||quote_literal(p_key)||' for update';
+        raise notice '%',v_sql;
+        --found a foreign key, now find the primary keys for any data that exists in any of those tables.
+        for rd in execute v_sql
+        loop
+            v_recursion_key=rx.foreign_table_schema||'.'||rx.foreign_table_name||'.'||rx.foreign_column_name||'='||rd.key;
+             raise notice 'Recursion key %',v_recursion_key;
+             raise notice 'Recursion key p%',p_recursion;
+            if (v_recursion_key = any (p_recursion)) then
+                raise notice 'Avoiding infinite loop';
+            else
+                raise notice 'Recursing to %,%',rx.foreign_table_name, rd.key;
+                recnum:= recnum +bdar_forget_configured(rx.foreign_table_schema::varchar, rx.foreign_table_name::varchar, rd.key::varchar, p_recursion||v_recursion_key,  rx.foreign_column_name::varchar);
+            end if;
+        end loop;
+    end loop;
+    begin
+    --actually delete original record.\
+   	raise notice 'Info %.% %',p_schema,p_table,foreign_column;
    
-    EXCEPTION WHEN OTHERS THEN RECNUM=0;
-    END;
+    v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
+    select table_name from bdar_tables.private_entities 
+    where bdar_tables.private_entities.table_name in(p_table) 
+    and bdar_tables.private_entities.schema_name in(p_schema) into ret_val;
+    raise notice 'name: %',ret_val;
+    v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
+    if(ret_val is not null) then
+   		 v_sql := 'update '||p_schema||'.'||p_table||' set '||foreign_column||'= NULL where '||v_primary_key||'='||quote_literal(p_key);
+		 v_delete_after:= (select c.value from bdar_tables.conf c where c.param = 'delete_wait_time_minutes');
+   		 v_insert_sql:= FORMAT('insert into bdar_tables.delayed_delete_rows (schema_name, table_name, record_id, delete_on) VALUES(%s,%s,%s,%s)',
+   							  quote_literal(p_schema),quote_literal(p_table),p_key, quote_literal(current_timestamp + (v_delete_after * interval '1 minute')));   		
+   		execute v_insert_sql;
+    end if;
+   	raise notice '%',v_sql;
+    execute v_sql;
+   	--raise notice 'Deleting %.% %=%',p_schema,p_table,v_primary_key,p_key;
+    get diagnostics v_rows= row_count;
+    recnum:= recnum +v_rows;
+   
+    exception when others then recnum=0;
+    end;
 
-    RETURN RECNUM;
-END;
+    return recnum;
+end;
 $$
-LANGUAGE PLPGSQL;
+language PLPGSQL;
 
--- NEEDED FOR LOCALHOST. OTHERWISE DOES NOT WORK
+-- needed for localhost. Otherwise does not work
 
-UPDATE CRON.JOB SET NODENAME = '';
+UPDATE cron.job SET nodename = '';

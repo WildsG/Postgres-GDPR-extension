@@ -1,113 +1,113 @@
-CREATE SCHEMA BDAR;
-SET SEARCH_PATH TO BDAR;
+create schema bdar;
+set search_path to bdar;
 
-CREATE TABLE ACCOUNT(
-   ID SERIAL PRIMARY KEY,
-   USERNAME VARCHAR (50) UNIQUE NOT NULL,
-   PASSWORD_HASH VARCHAR NOT NULL,
-   FIRSTNAME VARCHAR(50) NOT NULL,
-   LASTNAME VARCHAR(100) NOT NULL,
-   EMAIL VARCHAR (355) UNIQUE NOT NULL,
-   PHONE_NUMBER VARCHAR(15) UNIQUE NOT NULL,
-   CREATED_ON TIMESTAMP NOT NULL,
-   LAST_LOGIN TIMESTAMP
+create table account(
+   id serial primary key,
+   username varchar (50) unique not null,
+   password_hash varchar not null,
+   firstname varchar(50) not null,
+   lastname varchar(100) not null,
+   email varchar (355) unique not null,
+   phone_number varchar(15) unique not null,
+   created_on timestamp not null,
+   last_login timestamp
 );
 
-CREATE TABLE CREDIT_CARD(
-   ID SERIAL PRIMARY KEY,
-   CC VARCHAR UNIQUE NOT NULL,
-   CC_NUM VARCHAR NOT NULL,
-   HOLDER_NAME VARCHAR NOT NULL,
-   EXPIRE_DATE TIMESTAMP NOT NULL,
-   ACCOUNT_ID INTEGER REFERENCES ACCOUNT(ID)
+create table credit_card(
+   id serial primary key,
+   cc varchar unique not null,
+   cc_num varchar not null,
+   holder_name varchar not null,
+   expire_date timestamp not null,
+   account_id integer references account(id)
 );
 
-CREATE TABLE PRODUCT(
-   ID SERIAL PRIMARY KEY,
-   PRODUCT_NAME VARCHAR(100) NOT NULL,
-   PRODUCT_TYPE VARCHAR(20),
-   DESCRIPTION VARCHAR(255),
-   STOCK INTEGER NOT NULL,
-   PRICE NUMERIC NOT NULL
+create table product(
+   id serial primary key,
+   product_name varchar(100) not null,
+   product_type varchar(20),
+   description varchar(255),
+   stock integer not null,
+   price numeric not null
 );
 
-CREATE TABLE REVIEW(
-	ID SERIAL PRIMARY KEY,
-	ACCOUNT_ID INTEGER REFERENCES ACCOUNT(ID),
-	PRODUCT_ID INTEGER REFERENCES PRODUCT(ID),
-	MESSAGE VARCHAR(255),
-	RATING INTEGER NOT NULL
+create table review(
+	id serial primary key,
+	account_id integer references account(id),
+	product_id integer references product(id),
+	message varchar(255),
+	rating integer not null
 );
 
-CREATE TABLE PURCHASE_HISTORY(
-	ID SERIAL PRIMARY KEY,
-	ACCOUNT_ID INTEGER REFERENCES ACCOUNT(ID),
-	PRODUCT_ID INTEGER REFERENCES PRODUCT(ID),
-	PURCHASE_DATE TIMESTAMP NOT NULL
+create table purchase_history(
+	id serial primary key,
+	account_id integer references account(id),
+	product_id integer references product(id),
+	purchase_date timestamp not null
 );
 
-CREATE TABLE ADDRESS(
-	ID SERIAL PRIMARY KEY,
-	NAME VARCHAR(100) NOT NULL,
-	ADDRESS1 VARCHAR(100) NOT NULL,
-	ADDRESS2 VARCHAR(100),
-	CITY VARCHAR(100) NOT NULL,
-	STATE_PROVINCE VARCHAR(100) NOT NULL,
-	POSTAL_CODE VARCHAR(10) NOT NULL,
-	ACCOUNT_ID INTEGER REFERENCES ACCOUNT(ID)
+create table address(
+	id serial primary key,
+	name varchar(100) not null,
+	address1 varchar(100) not null,
+	address2 varchar(100),
+	city varchar(100) not null,
+	state_province varchar(100) not null,
+	postal_code varchar(10) not null,
+	account_id integer references account(id)
 );
 
 
 
-INSERT INTO ACCOUNT(USERNAME,PASSWORD_HASH,FIRSTNAME, LASTNAME,EMAIL,PHONE_NUMBER,CREATED_ON,LAST_LOGIN) VALUES 
-('VARDENIS', MD5('PASSWORD'),'VARDENIS', 'PAVARDENIS' ,'VARDENIS.TEST@GMAIL.COM','+37000000000', CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + (20 * INTERVAL '1 MINUTE'));
+insert into account(username,password_hash,firstname, lastname,email,phone_number,created_on,last_login) values 
+('vardenis', md5('password'),'vardenis', 'pavardenis' ,'vardenis.test@gmail.com','+37000000000', current_timestamp,current_timestamp + (20 * interval '1 minute'));
 
-INSERT INTO ACCOUNT(USERNAME,PASSWORD_HASH,FIRSTNAME, LASTNAME,EMAIL,PHONE_NUMBER,CREATED_ON,LAST_LOGIN) VALUES 
-('VARDELIS', MD5('PASSWORD'),'VARDELIS', 'PAVARDELIS' ,'VARDELIS.TEST@GMAIL.COM','+3701234567', CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + (20 * INTERVAL '1 MINUTE'));
+insert into account(username,password_hash,firstname, lastname,email,phone_number,created_on,last_login) values 
+('vardelis', md5('password'),'vardelis', 'pavardelis' ,'vardelis.test@gmail.com','+3701234567', current_timestamp,current_timestamp + (20 * interval '1 minute'));
 
-INSERT INTO ACCOUNT(USERNAME,PASSWORD_HASH,FIRSTNAME, LASTNAME,EMAIL,PHONE_NUMBER,CREATED_ON,LAST_LOGIN) VALUES 
-('VARDAUSKAS', MD5('PASSWORD'),'VARDAUSKAS', 'PAVARDAUSKAS' ,'VARDAUSKAS.TEST@GMAIL.COM','+3709876652', CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + (20 * INTERVAL '1 MINUTE'));
+insert into account(username,password_hash,firstname, lastname,email,phone_number,created_on,last_login) values 
+('vardauskas', md5('password'),'vardauskas', 'pavardauskas' ,'vardauskas.test@gmail.com','+3709876652', current_timestamp,current_timestamp + (20 * interval '1 minute'));
 
-INSERT INTO CREDIT_CARD(CC,CC_NUM,HOLDER_NAME,EXPIRE_DATE,ACCOUNT_ID) VALUES 
-('1000 1234 5678 9010','111','VARDENIS PAVARDENIS', CURRENT_TIMESTAMP + (5 * INTERVAL '1 YEAR'),1);
+insert into credit_card(cc,cc_num,holder_name,expire_date,account_id) values 
+('1000 1234 5678 9010','111','vardenis pavardenis', current_timestamp + (5 * interval '1 year'),1);
 
-INSERT INTO CREDIT_CARD(CC,CC_NUM,HOLDER_NAME,EXPIRE_DATE,ACCOUNT_ID) VALUES 
-('1000 1234 5678 9011','112','VARDENIS PAVARDENIS', CURRENT_TIMESTAMP + (5 * INTERVAL '1 YEAR'),1);
+insert into credit_card(cc,cc_num,holder_name,expire_date,account_id) values 
+('1000 1234 5678 9011','112','vardenis pavardenis', current_timestamp + (5 * interval '1 year'),1);
 
-INSERT INTO PRODUCT(PRODUCT_NAME, PRODUCT_TYPE, DESCRIPTION, STOCK, PRICE) VALUES 
-('SAMSUNG GALAXY 7', 'SMARTPHONE', 'GOOD, RELIABLE, BUT WEAK BATTERY', 1, 80);
-INSERT INTO PRODUCT(PRODUCT_NAME, PRODUCT_TYPE, DESCRIPTION, STOCK, PRICE) VALUES 
-('SAMSUNG GALAXY 8', 'SMARTPHONE', 'BETTER THAN 7 , GOOD, RELIABLE, BUT WEAK BATTERY', 1, 180);
-INSERT INTO PRODUCT(PRODUCT_NAME, PRODUCT_TYPE, DESCRIPTION, STOCK, PRICE) VALUES 
-('SAMSUNG GALAXY 9', 'SMARTPHONE', 'BETTER THAN 8 , GOOD, RELIABLE, BUT WEAK BATTERY', 1, 380);
+insert into product(product_name, product_type, description, stock, price) values 
+('samsung galaxy 7', 'smartphone', 'good, reliable, but weak battery', 1, 80);
+insert into product(product_name, product_type, description, stock, price) values 
+('samsung galaxy 8', 'smartphone', 'better than 7 , good, reliable, but weak battery', 1, 180);
+insert into product(product_name, product_type, description, stock, price) values 
+('samsung galaxy 9', 'smartphone', 'better than 8 , good, reliable, but weak battery', 1, 380);
 
-INSERT INTO REVIEW(ACCOUNT_ID, PRODUCT_ID,MESSAGE, RATING) VALUES 
-(1, 2, 'I LIKED IT', 9);
-INSERT INTO REVIEW(ACCOUNT_ID, PRODUCT_ID,MESSAGE, RATING) VALUES 
-(1, 1, 'NOT SO GOOD. QUITE OLD', 7);
+insert into review(account_id, product_id,message, rating) values 
+(1, 2, 'i liked it', 9);
+insert into review(account_id, product_id,message, rating) values 
+(1, 1, 'not so good. quite old', 7);
 
-INSERT INTO PURCHASE_HISTORY(ACCOUNT_ID, PRODUCT_ID, PURCHASE_DATE) VALUES
-(1,2, CURRENT_TIMESTAMP);
-INSERT INTO PURCHASE_HISTORY(ACCOUNT_ID, PRODUCT_ID, PURCHASE_DATE) VALUES
-(1,1, CURRENT_TIMESTAMP);
-
-
-INSERT INTO ADDRESS(NAME, ADDRESS1, ADDRESS2, CITY ,STATE_PROVINCE, POSTAL_CODE, ACCOUNT_ID) VALUES 
-('HOME', 'KONSTITUCIJOS 00-0', NULL, 'VILNIUS', 'VILNIAUS APSKRITIS', '45678', 1);
-INSERT INTO ADDRESS(NAME, ADDRESS1, ADDRESS2, CITY ,STATE_PROVINCE, POSTAL_CODE, ACCOUNT_ID) VALUES 
-('HOME', 'KONSTITUCIJOS 00-0', NULL, 'VILNIUS', 'VILNIAUS APSKRITIS', '44009', 2);
-INSERT INTO ADDRESS(NAME, ADDRESS1, ADDRESS2, CITY ,STATE_PROVINCE, POSTAL_CODE, ACCOUNT_ID) VALUES 
-('HOME', 'KONSTITUCIJOS 00-0', NULL, 'VILNIUS', 'VILNIAUS APSKRITIS', '46888', 3);
-
-CREATE VIEW PERSONS_VIEW AS 
-SELECT AA.ID, AA.FIRSTNAME, AA.LASTNAME, AA.EMAIL,AA.PHONE_NUMBER, AD."NAME",AD.ADDRESS1, AD.ADDRESS2, AD.CITY, AD.STATE_PROVINCE, AD.POSTAL_CODE FROM ACCOUNT AA
-LEFT JOIN ADDRESS AD ON AD.ACCOUNT_ID = AA.ID;
+insert into purchase_history(account_id, product_id, purchase_date) values
+(1,2, current_timestamp);
+insert into purchase_history(account_id, product_id, purchase_date) values
+(1,1, current_timestamp);
 
 
-SELECT * FROM ACCOUNT;
-SELECT * FROM CREDIT_CARD;
-SELECT * FROM PRODUCT;
-SELECT * FROM REVIEW;
-SELECT * FROM PURCHASE_HISTORY;
-SELECT * FROM ADDRESS;
-SELECT * FROM PERSONS_VIEW PV
+insert into address(name, address1, address2, city ,state_province, postal_code, account_id) values 
+('home', 'konstitucijos 00-0', null, 'vilnius', 'vilniaus apskritis', '45678', 1);
+insert into address(name, address1, address2, city ,state_province, postal_code, account_id) values 
+('home', 'konstitucijos 00-0', null, 'vilnius', 'vilniaus apskritis', '44009', 2);
+insert into address(name, address1, address2, city ,state_province, postal_code, account_id) values 
+('home', 'konstitucijos 00-0', null, 'vilnius', 'vilniaus apskritis', '46888', 3);
+
+create view persons_view as 
+select aa.id, aa.firstname, aa.lastname, aa.email,aa.phone_number, ad."name",ad.address1, ad.address2, ad.city, ad.state_province, ad.postal_code from account aa
+left join address ad on ad.account_id = aa.id;
+
+
+select * from account;
+select * from credit_card;
+select * from product;
+select * from review;
+select * from purchase_history;
+select * from address;
+select * from persons_view pv
