@@ -149,17 +149,17 @@ select * from bdar_tables.conf
 select update_parameter('delete_wait_time_minutes', '5');
 
 --- pridedama anonimizavimo taiskykles
-select add_anon_rule('phone',array['0','xxxx','0'], 'super')
+select add_anon_rule('phone',array['0','xxxx','0'], 'SUPER')
 --- patikriname esamas anonimizavimo taisykles
 select * from bdar_tables.anon_config ac;
 --- anonimizuojame vaizda
-select  bdar_anonimyze('high', 'persons_view', array[null,null,null,'email','phone',null,null,null,null,null,'zip'])
+select  bdar_anonimyze('HIGH', 'persons_view', array[null,null,null,'email','phone',null,null,null,null,null,'zip'])
 --- anonimizuojama vaizdo stuleplis
-select bdar_anonimyze_column('high', 'persons_view', 'phone_number', 'phone');
+select bdar_anonimyze_column('HIGH', 'persons_view', 'phone_number', 'phone');
 --- patikrinamas anonimizuotas vaizdas
 select * from persons_view_anonimyzed pva
 --- pasaliname anonimizavimo taisykle
-select remove_anon_rule('phone','super')
+select remove_anon_rule('phone','SUPER')
 
 --- nustatome sifruojama stulpeli
 select set_crypted_column('bdar','credit_card','cc', 'mykey')
@@ -171,6 +171,6 @@ select * from credit_card cc2
 --- issifurojam iraso informacija
 select cc, pgp_sym_decrypt(cc::bytea, 'mykey') from credit_card ;
 --- pasaliname kriptuojamo stulpelio tirggeri
-select remove_crypted_column('bdar','credit_card','cc_num')
+select remove_crypted_column('bdar','credit_card','cc')
 
 
