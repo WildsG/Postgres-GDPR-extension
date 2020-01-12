@@ -98,9 +98,9 @@ insert into purchase_history(account_id, product_id, purchase_date) values
 insert into bdar.address(name, address1, address2, city ,state_province, postal_code, account_id) values 
 ('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '45678', 1);
 insert into bdar.address(name, address1, address2, city ,state_province, postal_code, account_id) values 
-('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '44009', 3);
+('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '44009', 2);
 insert into bdar.address(name, address1, address2, city ,state_province, postal_code, account_id) values 
-('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '46888', 4);
+('Home', 'Konstitucijos 00-0', null, 'Vilnius', 'Vilniaus apskritis', '46888', 2);
 
 create view persons_view as 
 select aa.id, aa.firstname, aa.lastname, aa.email,aa.phone_number, ad."name",ad.address1, ad.address2, ad.city, ad.state_province, ad.postal_code from account aa
@@ -116,6 +116,7 @@ select * from review;
 select * from purchase_history;
 select * from address;
 
+
 --create extension pgcrypto;
 
 --SELECT * FROM pg_available_extensions
@@ -129,8 +130,10 @@ drop extension pg_cron;
 
 select * from bdar_show_activity_log();
 
+select id as key from bdar.review
+            where account_id='1'
 
-
+            select * from bdar.review
 
 select * from bdar_tables.conf c;
 

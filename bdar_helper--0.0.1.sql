@@ -105,17 +105,27 @@ insert into bdar_tables.anon_config(command, value, anon_level) values ('email',
 insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',array['1','xxxx','3'], 'LOW');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['month'], 'LOW');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('zip', array['50'], 'LOW');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('mask',array['5', '***', '5'], 'LOW');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('numeric',array['50'], 'LOW');
+
 
 
 insert into bdar_tables.anon_config(command, value, anon_level) values ('email',array['2', '*****', '4'], 'MED');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',array['1','xxxxxx','1'], 'MED');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['year'], 'MED');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('zip', array['100'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('mask',array['3', '***', '3'], 'MED');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('numeric',array['100'], 'MED');
+
+
 
 insert into bdar_tables.anon_config(command, value, anon_level) values ('email',array['1', '******', '2'], 'HIGH');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('phone',array['2','xxxxxx','0'], 'HIGH');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('birth',array['decade'], 'HIGH');
 insert into bdar_tables.anon_config(command, value, anon_level) values ('zip', array['1000'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('mask',array['0', '***', '0'], 'HIGH');
+insert into bdar_tables.anon_config(command, value, anon_level) values ('numeric',array['1000'], 'HIGH');
+
 
 create or replace function bdar_anonimyze(anon_lvl varchar, view_name varchar, commands varchar[]) returns void as 
 $$
@@ -530,7 +540,8 @@ begin
         for rd in execute v_sql
         loop
             v_recursion_key=rx.foreign_table_schema||'.'||rx.foreign_table_name||'.'||rx.foreign_column_name||'='||rd.key;
-             raise notice '%',v_recursion_key;
+             raise notice 'Recursion key %',v_recursion_key;
+             raise notice 'Recursion key p%',p_recursion;
             if (v_recursion_key = any (p_recursion)) then
                 raise notice 'Avoiding infinite loop';
             else
