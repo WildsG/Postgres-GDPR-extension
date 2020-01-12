@@ -312,7 +312,6 @@ begin
 	SELECT * FROM bdar_tables.postgres_log WITH NO DATA;
 	select  setting from pg_catalog.pg_settings where name = 'data_directory' into dir;
 	v_select_q := 'copy tmp_table from program '||' ''cat '||dir||'/log/*.csv'' with csv';
-	raise notice '%', v_select_q;
 	execute v_select_q ;
 	INSERT INTO bdar_tables.postgres_log 
 	SELECT * FROM tmp_table t where not exists (select * from bdar_tables.postgres_log p where p.session_id = t.session_id and p.session_line_num = t.session_line_num);
@@ -416,7 +415,6 @@ declare
     v_insert_sql varchar;
     v_delete_after integer;
 begin
-	raise notice 'Info %',foreign_column;
     recnum := 0;
     select ccu.column_name into v_primary_key
         from
@@ -443,43 +441,30 @@ begin
     loop
         v_sql := 'select '||rx.foreign_table_primary_key||' as key from '||rx.foreign_table_schema||'.'||rx.foreign_table_name||'
             where '||rx.foreign_column_name||'='||quote_literal(p_key)||' for update';
-        raise notice '%',v_sql;
-        --found a foreign key, now find the primary keys for any data that exists in any of those tables.
         for rd in execute v_sql
         loop
             v_recursion_key=rx.foreign_table_schema||'.'||rx.foreign_table_name||'.'||rx.foreign_column_name||'='||rd.key;
-             raise notice '%',v_recursion_key;
             if (v_recursion_key = any (p_recursion)) then
                 raise notice 'Avoiding infinite loop';
             else
-                raise notice 'Recursing to %,%',rx.foreign_table_name, rd.key;
                 recnum:= recnum +bdar_forget(rx.foreign_table_schema::varchar, rx.foreign_table_name::varchar, rd.key::varchar, p_recursion||v_recursion_key,  rx.foreign_column_name::varchar);
             end if;
         end loop;
     end loop;
     begin
-    --actually delete original record.\
     v_is_nullable := 'select is_nullable from INFORMATION_SCHEMA.columns where table_schema = '||quote_literal(p_schema)||' and table_name ='||quote_literal(p_table)||' and column_name ='||quote_literal(foreign_column);
    	if(v_is_nullable is not null) then
    		execute v_is_nullable into ret_val;
-   	else
-   		raise notice 'test:: %',v_is_nullable; 
-   	end if;
-   	raise notice 'Info %.% %',p_schema,p_table,foreign_column;
-   
+   	end if;   
     v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
    	if(ret_val = 'YES') then
    		v_sql := 'update '||p_schema||'.'||p_table||' set '||foreign_column||'= NULL where '||v_primary_key||'='||quote_literal(p_key);
    		v_delete_after:= (select c.value from bdar_tables.conf c where c.param = 'delete_wait_time_minutes');
 		v_insert_sql:= FORMAT('insert into bdar_tables.delayed_delete_rows (schema_name, table_name, record_id, delete_on) VALUES(%s,%s,%s,%s)',
    							  quote_literal(p_schema),quote_literal(p_table),p_key, quote_literal(current_timestamp + (v_delete_after * interval '1 minute')));
-     	raise notice '%',v_insert_sql;
    		execute v_insert_sql;
    end if;
-    
-   	raise notice '%',v_sql;
     execute v_sql;
-   	--raise notice 'Deleting %.% %=%',p_schema,p_table,v_primary_key,p_key;
     get diagnostics v_rows= row_count;
     recnum:= recnum +v_rows;
    
@@ -508,7 +493,6 @@ declare
     v_insert_sql varchar;
     v_delete_after integer;
 begin
-	raise notice 'Info %',foreign_column;
     recnum := 0;
     select ccu.column_name into v_primary_key
         from
@@ -535,30 +519,22 @@ begin
     loop
         v_sql := 'select '||rx.foreign_table_primary_key||' as key from '||rx.foreign_table_schema||'.'||rx.foreign_table_name||'
             where '||rx.foreign_column_name||'='||quote_literal(p_key)||' for update';
-        raise notice '%',v_sql;
-        --found a foreign key, now find the primary keys for any data that exists in any of those tables.
         for rd in execute v_sql
         loop
             v_recursion_key=rx.foreign_table_schema||'.'||rx.foreign_table_name||'.'||rx.foreign_column_name||'='||rd.key;
-             raise notice 'Recursion key %',v_recursion_key;
-             raise notice 'Recursion key p%',p_recursion;
             if (v_recursion_key = any (p_recursion)) then
                 raise notice 'Avoiding infinite loop';
             else
-                raise notice 'Recursing to %,%',rx.foreign_table_name, rd.key;
                 recnum:= recnum +bdar_forget_configured(rx.foreign_table_schema::varchar, rx.foreign_table_name::varchar, rd.key::varchar, p_recursion||v_recursion_key,  rx.foreign_column_name::varchar);
             end if;
         end loop;
     end loop;
     begin
-    --actually delete original record.\
-   	raise notice 'Info %.% %',p_schema,p_table,foreign_column;
    
     v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
     select table_name from bdar_tables.private_entities 
     where bdar_tables.private_entities.table_name in(p_table) 
     and bdar_tables.private_entities.schema_name in(p_schema) into ret_val;
-    raise notice 'name: %',ret_val;
     v_sql := 'delete from '||p_schema||'.'||p_table||' where '||v_primary_key||'='||quote_literal(p_key);
     if(ret_val is not null) then
    		 v_sql := 'update '||p_schema||'.'||p_table||' set '||foreign_column||'= NULL where '||v_primary_key||'='||quote_literal(p_key);
@@ -567,9 +543,7 @@ begin
    							  quote_literal(p_schema),quote_literal(p_table),p_key, quote_literal(current_timestamp + (v_delete_after * interval '1 minute')));   		
    		execute v_insert_sql;
     end if;
-   	raise notice '%',v_sql;
     execute v_sql;
-   	--raise notice 'Deleting %.% %=%',p_schema,p_table,v_primary_key,p_key;
     get diagnostics v_rows= row_count;
     recnum:= recnum +v_rows;
    
